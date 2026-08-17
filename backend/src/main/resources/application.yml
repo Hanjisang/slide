@@ -1,0 +1,36 @@
+server:
+  port: ${SERVER_PORT:8080}
+  tomcat:
+    max-swallow-size: -1
+spring:
+  application:
+    name: medical-report-platform
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/medical_report?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false}
+    username: ${DB_USERNAME:medical}
+    password: ${DB_PASSWORD:medical123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: always
+      encoding: UTF-8
+  servlet:
+    multipart:
+      max-file-size: ${MAX_SLIDE_SIZE:10GB}
+      max-request-size: ${MAX_SLIDE_SIZE:10GB}
+  jackson:
+    time-zone: Asia/Shanghai
+    default-property-inclusion: non_null
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+app:
+  secret: ${APP_SECRET:change-this-demo-secret-before-production}
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin123}
+  slide-worker-url: ${SLIDE_WORKER_URL:http://localhost:8000}
+  report-dir: ${REPORT_DIR:./data/reports}
+  mock-report-url: ${MOCK_REPORT_URL:http://localhost:8080/api/mock-report/receive}
+
