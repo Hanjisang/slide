@@ -44,7 +44,9 @@ public class SystemController {
         Map<String, Object> components = new LinkedHashMap<>();
         components.put("mysql", checkMysql());
         components.put("minio", storageHealth());
-        components.put("slideWorker", checkWorker());
+        Map<String, Object> workerHealth = checkWorker();
+        components.put("slideWorker", workerHealth);
+        components.put("goParser", goParserHealth(workerHealth));
         Map<String, Object> queues = new LinkedHashMap<>();
         queues.put("pendingCollectTasks", count("SELECT COUNT(*) FROM collect_task WHERE enabled=1 AND (next_run_time IS NULL OR next_run_time<=NOW())"));
         queues.put("failedCollectTasks", count("SELECT COUNT(*) FROM collect_log WHERE status='FAILED' AND created_at>=CURRENT_DATE"));
@@ -162,6 +164,16 @@ public class SystemController {
     private Map<String, Object> checkWorker() {
         try { Map<?, ?> result = worker.get().uri("/health").retrieve().body(Map.class); return Map.of("status", "UP", "detail", result == null ? Map.of() : result); }
         catch (Exception ex) { return Map.of("status", "DOWN", "message", ex.getMessage()); }
+    }
+
+    private Map<String, Object> goParserHealth(Map<String, Object> workerHealth) {
+        Object detail = workerHealth.get("detail");
+        if (detail instanceof Map<?, ?> workerDetail && workerDetail.get("goParser") instanceof Map<?, ?> parser) {
+            Map<String, Object> result = new LinkedHashMap<>();
+            parser.forEach((key, value) -> result.put(String.valueOf(key), value));
+            return result;
+        }
+        return Map.of("status", "DOWN", "message", "Slide Worker 未返回 Go Parser 状态");
     }
 
     private Map<String, Object> storageHealth() {

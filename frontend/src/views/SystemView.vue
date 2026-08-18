@@ -30,7 +30,7 @@ async function saveStorage(){if(storageForm.id)await api.put(`/storage-targets/$
 async function testStorage(row:any){const result:any=await api.post(`/storage-targets/${row.id}/test`);ElMessage.success(`${result.bucket} 连接正常`)}
 async function alertAction(row:any,action:string){await api.post(`/alerts/events/${row.id}/${action}`);ElMessage.success(action==='close'?'告警已关闭':'告警已确认');load()}
 function formatBytes(value:any){if(typeof value!=='number')return value??'UNKNOWN';const units=['B','KB','MB','GB','TB'];if(!value)return '0 B';const i=Math.min(Math.floor(Math.log(value)/Math.log(1024)),4);return `${(value/1024**i).toFixed(i?1:0)} ${units[i]}`}
-function componentLabel(key:string){return {mysql:'MySQL',minio:'MinIO',slideWorker:'Slide Worker'}[key]||key}
+function componentLabel(key:string){return {mysql:'MySQL',minio:'MinIO',slideWorker:'Slide Worker',goParser:'Go Parser'}[key]||key}
 onMounted(load)
 </script>
 
