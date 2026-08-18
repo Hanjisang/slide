@@ -2,7 +2,7 @@ name: medical-report-mvp
 
 services:
   mysql:
-    image: mysql:8.4
+    image: 10.25.13.206:5000/devops/mysql:8.4
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
       MYSQL_DATABASE: medical_report
@@ -22,7 +22,7 @@ services:
       retries: 30
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    image: 10.25.13.206:5000/devops/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -111,7 +111,7 @@ services:
         condition: service_healthy
 
   nginx:
-    image: nginx:1.29-alpine
+    image: 10.25.13.206:5000/devops/nginx:1.30.1-alpine
     ports:
       - "8088:80"
     volumes:

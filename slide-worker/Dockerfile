@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM 10.25.13.206:5000/devops/python:3.12-slim
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install -y --no-install-recommends libopenslide0 \
