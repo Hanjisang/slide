@@ -1,6 +1,6 @@
-# 医疗数据治理及数字病理全生命周期上报平台 v0.2.0
+# 医疗数据治理及数字病理全生命周期上报平台 v0.3.0
 
-面向医院信息化场景的可运行 MVP，覆盖医疗数据治理、数字切片全生命周期、文件版本与备份、病理数据和真实切片一键上报。
+面向医院信息化场景的可运行 MVP，覆盖医疗数据治理、数字切片全生命周期、文件版本与备份、病理数据和真实切片一键上报，并新增可独立运行的 Go 多格式切片解析服务。
 
 ## 系统架构
 
@@ -8,18 +8,19 @@
 Browser -> Nginx -> Vue 3 frontend
                  -> Spring Boot API -> MySQL
                                     -> MinIO
-                                    -> slide-worker -> OpenSlide
+                                    -> slide-worker -> SVS / OpenSlide
+                                                    -> Vendor formats / Go Parser
                                     -> HOT / ARCHIVE / BACKUP storage targets
                                     -> Mock/HTTP/File report receiver
 ```
 
-后端保持单体应用，厂商切片 SDK 统一隔离在 `slide-worker`；部署只依赖 Docker Compose，不包含消息队列、缓存集群或额外监控系统。
+后端保持单体应用，Python Worker 是统一解析门面，厂家格式的纯 Go 算法和可选 SDK 边界隔离在 `go-parser`；部署只依赖 Docker Compose，不包含消息队列、缓存集群或额外监控系统。
 
 ## 技术栈
 
 - 前端：Vue 3、Vite、TypeScript、Element Plus、Pinia、Vue Router、Axios、OpenSeadragon
 - 后端：Java 21、Spring Boot 3.4、Maven、MyBatis Plus、Spring JDBC、Spring Scheduler、Apache POI
-- 切片服务：Python 3.12、FastAPI、OpenSlide
+- 切片服务：Python 3.12、FastAPI、OpenSlide；Go 1.23、`net/http`
 - 基础设施：MySQL 8.4、MinIO、Nginx、Docker Compose
 
 ## 目录
@@ -28,6 +29,7 @@ Browser -> Nginx -> Vue 3 frontend
 backend/       Spring Boot API 与业务闭环
 frontend/      Vue 3 管理端
 slide-worker/  格式 Adapter、OpenSlide 元数据与 Tile
+go-parser/     多格式 Parser、只读缓存解析与统一 Tile API
 deploy/        MySQL 初始化和 Nginx 配置
 docs/          架构、数据库、API、部署和进度
 ```
@@ -51,6 +53,8 @@ docker compose ps
 - 后端直连：[http://localhost:8080/api/system/ping](http://localhost:8080/api/system/ping)
 - MinIO Console：[http://localhost:9001](http://localhost:9001)
 - Slide Worker API：[http://localhost:8000/docs](http://localhost:8000/docs)
+
+Go Parser 仅在 Compose 内部监听 `8100`，不通过 Nginx 暴露。
 
 停止服务：
 
@@ -92,13 +96,15 @@ docker compose down
 
 ## 切片格式支持
 
-| 格式 | Adapter | 状态 |
-|---|---|---|
-| SVS | OpenSlideAdapter | `AVAILABLE`，真实元数据、缩略图和 Tile |
-| KFB / SDPC / TRON / MDSX / TMAP | VendorAdapter | `ADAPTER_READY` / `SDK_REQUIRED` |
-| DMETRIX / FENLAN / ZYP / HWP / CSP | VendorAdapter | `ADAPTER_READY` / `SDK_REQUIRED` |
+| 格式 | Engine | 状态 | 说明 |
+|---|---|---|---|
+| SVS | OpenSlide | `AVAILABLE` | 真实 metadata、thumbnail、Tile 和浏览器验收 |
+| KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
+| SDPC | Go Native | `DECODER_REQUIRED` | JPEG/BMP 路径可构建；HEVC 缺 decoder，且缺真实样本 |
+| CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
+| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺 Linux SDK 与真实样本 |
 
-没有厂商 SDK 时系统只识别格式并明确返回 `SDK_NOT_AVAILABLE`，不会伪造解析结果。
+代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
 
 ## 当前限制
 
@@ -106,6 +112,6 @@ docker compose down
 - HTTP API 与 FILE 可作为数据源配置；MVP 自动增量采集的验收链路以 MySQL Connector 为准。
 - Token 存储在应用内存，服务重启后需重新登录；v0.2 提供 ADMIN/OPERATOR/AUDITOR/VIEWER 轻量 RBAC 和后端权限校验。
 - 不提供 MPI、FHIR/DICOM Server、病理 AI、消息队列和复杂工作流。
-- 大切片首次读取会下载到 worker 持久缓存；生产环境可在后续增加缓存淘汰策略。
+- 大切片首次读取会下载到 Worker 持久缓存；Go Parser 只读共享缓存，并在进程内保存最多 128 个、TTL 30 分钟的 Parser 实例。
 
-升级既有 v0.1 数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.2 验收](docs/v0.2-acceptance.md) 和 [当前进度](docs/progress.md)。
+升级既有数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.3 Parser 架构](docs/v0.3-parser-architecture.md)、[v0.3 验收](docs/v0.3-acceptance.md) 和 [当前进度](docs/progress.md)。
