@@ -1,5 +1,6 @@
 package com.medreport.medical;
 
+import com.medreport.auth.RequirePermission;
 import com.medreport.common.ApiResponse;
 import com.medreport.governance.ValidationService;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +19,7 @@ public class MedicalDataController {
     }
 
     @GetMapping("/{type}")
+    @RequirePermission("DATA_VIEW")
     public ApiResponse<Map<String, Object>> list(@PathVariable String type,
                                                  @RequestParam(defaultValue = "1") int page,
                                                  @RequestParam(defaultValue = "20") int size,
@@ -26,6 +28,7 @@ public class MedicalDataController {
     }
 
     @PostMapping("/{type}")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Map<String, Object>> create(@PathVariable String type, @RequestBody Map<String, Object> body) {
         long id = service.create(type, body);
         validation.validate(type.toUpperCase(), id);
@@ -33,6 +36,7 @@ public class MedicalDataController {
     }
 
     @PutMapping("/{type}/{id}")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Void> update(@PathVariable String type, @PathVariable long id, @RequestBody Map<String, Object> body) {
         service.update(type, id, body);
         validation.validate(type.toUpperCase(), id);

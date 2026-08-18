@@ -18,6 +18,7 @@ public class ZipReportExporter implements ReportExporter {
     private final Path reportDir;
     public ZipReportExporter(ObjectMapper mapper, @Value("${app.report-dir}") String reportDir) { this.mapper = mapper; this.reportDir = Path.of(reportDir); }
     @Override public boolean supports(String format) { return "ZIP".equalsIgnoreCase(format); }
+    @Override public boolean supports(String format,String reportType){return supports(format)&&!"PATHOLOGY_PACKAGE".equalsIgnoreCase(reportType);}
     @Override public ExportResult export(ReportContext context) {
         try {
             Files.createDirectories(reportDir); Path path = reportDir.resolve(context.batchNo() + ".zip");

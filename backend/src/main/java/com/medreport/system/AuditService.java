@@ -15,9 +15,12 @@ public class AuditService {
     }
 
     public void log(HttpServletRequest request, String operation, String module, Object businessId, String result, String detail) {
+        log(username(request), operation, module, businessId, result, detail);
+    }
+
+    public static String username(HttpServletRequest request) {
         Object attribute = request.getAttribute(AuthInterceptor.SESSION_ATTRIBUTE);
-        String username = attribute instanceof TokenService.Session session ? session.username() : "SYSTEM";
-        log(username, operation, module, businessId, result, detail);
+        return attribute instanceof TokenService.Session session ? session.username() : "SYSTEM";
     }
 
     public void log(String username, String operation, String module, Object businessId, String result, String detail) {
@@ -25,4 +28,3 @@ public class AuditService {
                 username, operation, module, businessId == null ? null : businessId.toString(), result, detail);
     }
 }
-
