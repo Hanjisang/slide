@@ -1,11 +1,11 @@
 {
   "name": "medical-report-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc --noEmit -p tsconfig.app.json && vite build",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
@@ -25,4 +25,3 @@
     "vue-tsc": "^3.0.5"
   }
 }
-
