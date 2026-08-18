@@ -33,3 +33,6 @@ mysql-data/
 *.zyp
 *.hwp
 *.csp
+
+/parser.zip
+/go-parser/vendor-libs/

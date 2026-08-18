@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS sys_user (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(64) NOT NULL UNIQUE, password_hash VARCHAR(100) NOT NULL,
-  display_name VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'USER', enabled TINYINT NOT NULL DEFAULT 1,
+  display_name VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL DEFAULT 'VIEWER', enabled TINYINT NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS system_config (
@@ -10,6 +10,18 @@ CREATE TABLE IF NOT EXISTS system_config (
 CREATE TABLE IF NOT EXISTS operation_log (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, username VARCHAR(64), operation VARCHAR(100) NOT NULL, module VARCHAR(50) NOT NULL,
   business_id VARCHAR(64), result VARCHAR(20) NOT NULL, detail VARCHAR(500), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS sys_role (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, role_code VARCHAR(30) NOT NULL UNIQUE, role_name VARCHAR(100) NOT NULL,
+  description VARCHAR(255), enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS sys_permission (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, permission_code VARCHAR(50) NOT NULL UNIQUE, permission_name VARCHAR(100) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS sys_role_permission (
+  role_id BIGINT NOT NULL, permission_id BIGINT NOT NULL, PRIMARY KEY(role_id, permission_id)
 );
 CREATE TABLE IF NOT EXISTS data_source_config (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, code VARCHAR(50) NOT NULL UNIQUE,
@@ -81,10 +93,12 @@ CREATE TABLE IF NOT EXISTS mapping_field (
 );
 CREATE TABLE IF NOT EXISTS dictionary (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, dict_type VARCHAR(50) NOT NULL UNIQUE, name VARCHAR(100) NOT NULL, description VARCHAR(255),
+  enabled TINYINT NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS dictionary_item (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, dictionary_id BIGINT NOT NULL, source_value VARCHAR(100) NOT NULL, target_value VARCHAR(100) NOT NULL, description VARCHAR(255),
+  enabled TINYINT NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uk_dictionary_item (dictionary_id, source_value)
 );
@@ -105,19 +119,24 @@ CREATE TABLE IF NOT EXISTS validation_handle_log (
 );
 CREATE TABLE IF NOT EXISTS pathology_case (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, patient_id BIGINT, visit_id BIGINT, pathology_no VARCHAR(100) NOT NULL UNIQUE, specimen_name VARCHAR(255),
-  clinical_diagnosis TEXT, pathology_diagnosis TEXT, case_status VARCHAR(30) NOT NULL DEFAULT 'CREATED',
+  specimen_type_code VARCHAR(50), clinical_diagnosis TEXT, pathology_diagnosis TEXT, case_status VARCHAR(30) NOT NULL DEFAULT 'CREATED',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS slide_file (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, case_id BIGINT NOT NULL, slide_no VARCHAR(100) NOT NULL, file_name VARCHAR(255) NOT NULL,
+  display_name VARCHAR(255), specimen_type_code VARCHAR(50), scan_time DATETIME,
   file_extension VARCHAR(20) NOT NULL, file_format VARCHAR(30) NOT NULL, file_size BIGINT NOT NULL, bucket_name VARCHAR(100) NOT NULL, object_key VARCHAR(1000) NOT NULL,
   adapter_type VARCHAR(50), sdk_status VARCHAR(30), width BIGINT, height BIGINT, level_count INT, levels_json TEXT, md5 VARCHAR(32),
+  storage_target_id BIGINT, storage_class VARCHAR(20) NOT NULL DEFAULT 'HOT', archive_status VARCHAR(20) NOT NULL DEFAULT 'NOT_ARCHIVED',
+  archive_target_id BIGINT, archive_object_key VARCHAR(1000), archived_at DATETIME, archived_by VARCHAR(64),
+  deleted TINYINT NOT NULL DEFAULT 0, deleted_at DATETIME, deleted_by VARCHAR(64), version_no INT NOT NULL DEFAULT 1,
   status VARCHAR(20) NOT NULL, error_message VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS report_template (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, report_type VARCHAR(50) NOT NULL, format VARCHAR(20) NOT NULL,
-  sender_type VARCHAR(20) NOT NULL, endpoint VARCHAR(1000), enabled TINYINT NOT NULL DEFAULT 1,
+  sender_type VARCHAR(20) NOT NULL, endpoint VARCHAR(1000), include_slide TINYINT NOT NULL DEFAULT 0,
+  business_type VARCHAR(50), schedule_enabled TINYINT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS report_batch (
@@ -131,6 +150,64 @@ CREATE TABLE IF NOT EXISTS report_record (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, batch_id BIGINT NOT NULL, business_type VARCHAR(30) NOT NULL, business_id BIGINT NOT NULL,
   status VARCHAR(20) NOT NULL, error_message VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS storage_target (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, storage_type VARCHAR(20) NOT NULL,
+  endpoint VARCHAR(500), access_key_encrypted VARCHAR(1000), secret_key_encrypted VARCHAR(1000), bucket VARCHAR(100) NOT NULL,
+  base_path VARCHAR(500), storage_class VARCHAR(20) NOT NULL, enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS archive_task (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, slide_id BIGINT NOT NULL, source_storage_id BIGINT NOT NULL, target_storage_id BIGINT NOT NULL,
+  source_object_key VARCHAR(1000) NOT NULL, target_object_key VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL, progress INT NOT NULL DEFAULT 0,
+  source_md5 VARCHAR(32), target_md5 VARCHAR(32), note VARCHAR(500), started_at DATETIME, finished_at DATETIME,
+  operator VARCHAR(64), error_message VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS archive_policy (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, condition_type VARCHAR(30) NOT NULL,
+  condition_value VARCHAR(100) NOT NULL, target_storage_id BIGINT NOT NULL, enabled TINYINT NOT NULL DEFAULT 1, last_run_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS file_asset (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, file_type VARCHAR(30) NOT NULL, business_type VARCHAR(30), business_id BIGINT,
+  file_name VARCHAR(255) NOT NULL, display_name VARCHAR(255), storage_target_id BIGINT NOT NULL, object_key VARCHAR(1000) NOT NULL,
+  file_size BIGINT NOT NULL, md5 VARCHAR(32) NOT NULL, current_version INT NOT NULL DEFAULT 1, deleted TINYINT NOT NULL DEFAULT 0,
+  deleted_at DATETIME, deleted_by VARCHAR(64), created_by VARCHAR(64), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS file_version (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, file_id BIGINT NOT NULL, version_no INT NOT NULL, storage_target_id BIGINT NOT NULL,
+  object_key VARCHAR(1000) NOT NULL, file_size BIGINT NOT NULL, md5 VARCHAR(32) NOT NULL, created_by VARCHAR(64),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_file_version(file_id, version_no)
+);
+CREATE TABLE IF NOT EXISTS backup_policy (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, source_storage_id BIGINT NOT NULL, target_storage_id BIGINT NOT NULL,
+  frequency VARCHAR(20) NOT NULL, cron_expression VARCHAR(100), enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS backup_task (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, file_id BIGINT NOT NULL, source_storage_id BIGINT NOT NULL, target_storage_id BIGINT NOT NULL,
+  target_object_key VARCHAR(1000), status VARCHAR(20) NOT NULL, progress INT NOT NULL DEFAULT 0, source_md5 VARCHAR(32), target_md5 VARCHAR(32),
+  started_at DATETIME, finished_at DATETIME, error_message VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_plan (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, template_id BIGINT NOT NULL, frequency_type VARCHAR(20) NOT NULL,
+  cron_expression VARCHAR(100), enabled TINYINT NOT NULL DEFAULT 1, last_run_time DATETIME, next_run_time DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS alert_rule (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, rule_type VARCHAR(50) NOT NULL, threshold_value DECIMAL(12,2),
+  severity VARCHAR(20) NOT NULL, enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS alert_event (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, rule_id BIGINT, event_type VARCHAR(50) NOT NULL, severity VARCHAR(20) NOT NULL,
+  source_type VARCHAR(30), source_id BIGINT, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+  acknowledged_by VARCHAR(64), acknowledged_at DATETIME, closed_by VARCHAR(64), closed_at DATETIME,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE DATABASE IF NOT EXISTS mock_hospital CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -154,7 +231,40 @@ CREATE TABLE IF NOT EXISTS mock_hospital.mock_lis_result (
 
 INSERT IGNORE INTO system_config(config_key, config_value, description) VALUES
 ('platform.name', '医疗数据及数字病理上报平台', '平台名称'), ('collect.enabled', 'true', '是否启用自动采集'), ('report.retry.enabled', 'true', '是否启用上报重试');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT '磁盘使用率告警','DISK_USAGE',90,'CRITICAL',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='DISK_USAGE');
 INSERT IGNORE INTO dictionary(id, dict_type, name, description) VALUES (1, 'SEX', '性别字典', '医院性别编码标准化');
+INSERT IGNORE INTO dictionary(dict_type, name, description) VALUES
+('SPECIMEN_TYPE', '标本类型', '数字病理标本类型'),
+('SLIDE_FORMAT', '切片格式', '数字切片格式'),
+('DIAGNOSIS_TYPE', '诊断类型', '诊断类型基础数据');
+INSERT IGNORE INTO dictionary_item(dictionary_id, source_value, target_value, description)
+SELECT id, 'TISSUE', 'TISSUE', '组织标本' FROM dictionary WHERE dict_type='SPECIMEN_TYPE';
+INSERT IGNORE INTO dictionary_item(dictionary_id, source_value, target_value, description)
+SELECT id, 'SVS', 'SVS', 'Aperio SVS' FROM dictionary WHERE dict_type='SLIDE_FORMAT';
+INSERT IGNORE INTO dictionary_item(dictionary_id, source_value, target_value, description)
+SELECT id, 'PRIMARY', 'PRIMARY', '主要诊断' FROM dictionary WHERE dict_type='DIAGNOSIS_TYPE';
+
+INSERT IGNORE INTO sys_role(role_code,role_name,description) VALUES
+('ADMIN','管理员','全部权限'),('OPERATOR','操作员','采集、质量、切片、归档和上报'),
+('AUDITOR','审计员','数据、日志、批次和监控只读'),('VIEWER','查看者','只读权限');
+INSERT IGNORE INTO sys_permission(permission_code,permission_name) VALUES
+('SLIDE_VIEW','查看切片'),('SLIDE_UPLOAD','上传切片'),('SLIDE_DOWNLOAD','下载切片'),('SLIDE_RENAME','重命名切片'),
+('SLIDE_DELETE','删除切片'),('SLIDE_ARCHIVE','归档切片'),('DATA_VIEW','查看医疗数据'),('DATA_EDIT','编辑医疗数据'),
+('QUALITY_MANAGE','质量管理'),('REPORT_GENERATE','生成上报'),('REPORT_SEND','发送上报'),('FILE_MANAGE','文件管理'),
+('DICT_MANAGE','字典管理'),('USER_MANAGE','用户管理'),('SYSTEM_CONFIG','系统配置'),('LOG_VIEW','查看日志'),('MONITOR_VIEW','查看监控');
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r CROSS JOIN sys_permission p WHERE r.role_code='ADMIN';
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('SLIDE_VIEW','SLIDE_UPLOAD','SLIDE_DOWNLOAD','SLIDE_RENAME','SLIDE_DELETE','SLIDE_ARCHIVE','DATA_VIEW','DATA_EDIT','QUALITY_MANAGE','REPORT_GENERATE','REPORT_SEND','FILE_MANAGE')
+WHERE r.role_code='OPERATOR';
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('SLIDE_VIEW','SLIDE_DOWNLOAD','DATA_VIEW','LOG_VIEW','MONITOR_VIEW') WHERE r.role_code='AUDITOR';
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
+('SLIDE_VIEW','DATA_VIEW') WHERE r.role_code='VIEWER';
 INSERT IGNORE INTO dictionary_item(dictionary_id, source_value, target_value, description) VALUES
 (1, '1', 'M', '男'), (1, '2', 'F', '女'), (1, '9', 'U', '未知');
 INSERT INTO mapping_template(id, name, business_type, source_system, enabled)
@@ -179,6 +289,15 @@ INSERT INTO validation_rule(business_type, field_name, rule_type, rule_config, e
 SELECT 'PATIENT', 'gender', 'ENUM', 'M,F,U', '患者性别不合法', 1 WHERE NOT EXISTS (SELECT 1 FROM validation_rule WHERE business_type='PATIENT' AND field_name='gender');
 INSERT INTO validation_rule(business_type, field_name, rule_type, rule_config, error_message, enabled)
 SELECT 'PATIENT', 'age', 'RANGE', '0,150', '患者年龄超出允许范围', 1 WHERE NOT EXISTS (SELECT 1 FROM validation_rule WHERE business_type='PATIENT' AND field_name='age');
+INSERT INTO validation_rule(business_type, field_name, rule_type, rule_config, error_message, enabled)
+SELECT 'PATHOLOGY_CASE','pathology_no','UNIQUE',NULL,'病理号重复',1 WHERE NOT EXISTS
+(SELECT 1 FROM validation_rule WHERE business_type='PATHOLOGY_CASE' AND field_name='pathology_no' AND rule_type='UNIQUE');
+INSERT INTO validation_rule(business_type, field_name, rule_type, rule_config, error_message, enabled)
+SELECT 'VISIT','admission_time','CROSS_FIELD','<=,discharge_time','入院时间不能晚于出院时间',1 WHERE NOT EXISTS
+(SELECT 1 FROM validation_rule WHERE business_type='VISIT' AND field_name='admission_time' AND rule_type='CROSS_FIELD');
+INSERT INTO validation_rule(business_type, field_name, rule_type, rule_config, error_message, enabled)
+SELECT 'PATIENT','gender','CROSS_RECORD','patient_no','患者性别跨来源不一致',1 WHERE NOT EXISTS
+(SELECT 1 FROM validation_rule WHERE business_type='PATIENT' AND field_name='gender' AND rule_type='CROSS_RECORD');
 INSERT INTO report_template(id, name, report_type, format, sender_type, endpoint, enabled)
 SELECT 1, '患者数据 JSON 上报', 'PATIENT', 'JSON', 'HTTP', NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM report_template WHERE id=1);
 INSERT IGNORE INTO mock_hospital.mock_his_patient(id, patient_no, patient_name, sex_code, birthday, age, id_card, phone, update_time) VALUES
@@ -190,4 +309,3 @@ INSERT IGNORE INTO mock_hospital.mock_emr_diagnosis(id, patient_id, visit_id, di
 (1, 1, 1, 'D12.1', '结肠良性肿瘤', 'PRIMARY', NOW(), NOW());
 INSERT IGNORE INTO mock_hospital.mock_lis_result(id, patient_id, visit_id, item_code, item_name, result_value, result_unit, reference_range, abnormal_flag, result_time, update_time) VALUES
 (1, 1, 1, 'WBC', '白细胞计数', '6.8', '10^9/L', '3.5-9.5', 'N', NOW(), NOW());
-

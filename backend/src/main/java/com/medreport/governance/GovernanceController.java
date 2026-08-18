@@ -1,5 +1,6 @@
 package com.medreport.governance;
 
+import com.medreport.auth.RequirePermission;
 import com.medreport.common.ApiResponse;
 import com.medreport.common.BizException;
 import com.medreport.system.AuditService;
@@ -17,8 +18,8 @@ public class GovernanceController {
     private static final Map<String, Resource> RESOURCES = Map.of(
             "mapping-templates", new Resource("mapping_template", Set.of("name","business_type","source_system","enabled"), "id DESC"),
             "mapping-fields", new Resource("mapping_field", Set.of("template_id","source_field","target_field","rule_type","rule_config","sort_order"), "template_id,sort_order,id"),
-            "dictionaries", new Resource("dictionary", Set.of("dict_type","name","description"), "id DESC"),
-            "dictionary-items", new Resource("dictionary_item", Set.of("dictionary_id","source_value","target_value","description"), "dictionary_id,id"),
+            "dictionaries", new Resource("dictionary", Set.of("dict_type","name","description","enabled"), "id DESC"),
+            "dictionary-items", new Resource("dictionary_item", Set.of("dictionary_id","source_value","target_value","description","enabled"), "dictionary_id,id"),
             "validation-rules", new Resource("validation_rule", Set.of("business_type","field_name","rule_type","rule_config","error_message","enabled"), "id DESC")
     );
     private final JdbcTemplate jdbc;
@@ -30,12 +31,14 @@ public class GovernanceController {
     }
 
     @GetMapping("/{resourceName}")
+    @RequirePermission({"DATA_VIEW","QUALITY_MANAGE","DICT_MANAGE"})
     public ApiResponse<List<Map<String, Object>>> list(@PathVariable String resourceName) {
         Resource resource = resource(resourceName);
         return ApiResponse.ok(jdbc.queryForList("SELECT * FROM " + resource.table() + " ORDER BY " + resource.orderBy()));
     }
 
     @PostMapping("/{resourceName}")
+    @RequirePermission({"QUALITY_MANAGE","DICT_MANAGE"})
     public ApiResponse<Map<String, Object>> create(@PathVariable String resourceName, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         Resource resource = resource(resourceName);
         Map<String, Object> data = sanitize(body, resource.fields());
@@ -49,6 +52,7 @@ public class GovernanceController {
     }
 
     @PutMapping("/{resourceName}/{id}")
+    @RequirePermission({"QUALITY_MANAGE","DICT_MANAGE"})
     public ApiResponse<Void> update(@PathVariable String resourceName, @PathVariable long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         Resource resource = resource(resourceName);
         Map<String, Object> data = sanitize(body, resource.fields());
@@ -62,6 +66,7 @@ public class GovernanceController {
     }
 
     @DeleteMapping("/{resourceName}/{id}")
+    @RequirePermission({"QUALITY_MANAGE","DICT_MANAGE"})
     public ApiResponse<Void> delete(@PathVariable String resourceName, @PathVariable long id) {
         Resource resource = resource(resourceName);
         jdbc.update("DELETE FROM " + resource.table() + " WHERE id=?", id);
@@ -83,4 +88,3 @@ public class GovernanceController {
         return data;
     }
 }
-

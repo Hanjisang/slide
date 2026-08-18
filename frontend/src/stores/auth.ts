@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import api from '../api'
 
-interface User { id: number; username: string; displayName: string; role: string }
+interface User { id: number; username: string; displayName: string; role: string; permissions: string[] }
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -20,6 +20,10 @@ export const useAuthStore = defineStore('auth', {
         this.token = ''; this.user = null
         localStorage.removeItem('medical_token'); localStorage.removeItem('medical_user')
       }
+    },
+    hasAny(required?: string[]) {
+      if (!required?.length || this.user?.role === 'ADMIN') return true
+      return required.some((permission) => this.user?.permissions?.includes(permission))
     },
   },
 })

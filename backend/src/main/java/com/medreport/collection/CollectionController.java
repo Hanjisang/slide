@@ -1,5 +1,6 @@
 package com.medreport.collection;
 
+import com.medreport.auth.RequirePermission;
 import com.medreport.common.ApiResponse;
 import com.medreport.common.BizException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,6 +21,7 @@ public class CollectionController {
     }
 
     @GetMapping("/collect-tasks")
+    @RequirePermission("DATA_VIEW")
     public ApiResponse<List<Map<String, Object>>> tasks() {
         return ApiResponse.ok(jdbc.queryForList("""
                 SELECT t.*,d.name data_source_name FROM collect_task t JOIN data_source_config d ON d.id=t.data_source_id ORDER BY t.id DESC
@@ -27,6 +29,7 @@ public class CollectionController {
     }
 
     @PostMapping("/collect-tasks")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body) {
         jdbc.update("""
                 INSERT INTO collect_task(task_name,data_source_id,business_type,execution_expression,execution_content,incremental_field,last_sync_time,enabled,next_run_time)
@@ -37,6 +40,7 @@ public class CollectionController {
     }
 
     @PutMapping("/collect-tasks/{id}")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Void> update(@PathVariable long id, @RequestBody Map<String, Object> body) {
         int count = jdbc.update("""
                 UPDATE collect_task SET task_name=?,data_source_id=?,business_type=?,execution_expression=?,execution_content=?,incremental_field=?,enabled=? WHERE id=?
@@ -47,11 +51,13 @@ public class CollectionController {
     }
 
     @PostMapping("/collect-tasks/{id}/execute")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Map<String, Object>> execute(@PathVariable long id) {
         return ApiResponse.ok(collectionService.execute(id));
     }
 
     @GetMapping("/collect-logs")
+    @RequirePermission("DATA_VIEW")
     public ApiResponse<List<Map<String, Object>>> logs() {
         return ApiResponse.ok(jdbc.queryForList("""
                 SELECT l.*,t.task_name FROM collect_log l JOIN collect_task t ON t.id=l.task_id ORDER BY l.id DESC LIMIT 200
@@ -60,4 +66,3 @@ public class CollectionController {
 
     private boolean bool(Object value) { return value instanceof Boolean b ? b : value instanceof Number n ? n.intValue()!=0 : Boolean.parseBoolean(String.valueOf(value)); }
 }
-

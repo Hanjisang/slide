@@ -18,7 +18,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
     public ResponseEntity<ApiResponse<Void>> handleBiz(BizException ex) {
-        return ResponseEntity.status(ex.getCode() == 401 ? HttpStatus.UNAUTHORIZED : HttpStatus.BAD_REQUEST)
+        HttpStatus status = ex.getCode() == 401 ? HttpStatus.UNAUTHORIZED : ex.getCode() == 403 ? HttpStatus.FORBIDDEN : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status)
                 .body(ApiResponse.error(ex.getCode(), ex.getMessage()));
     }
 
@@ -37,4 +38,3 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(500, "系统处理失败，请检查服务日志"));
     }
 }
-
