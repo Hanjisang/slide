@@ -42,9 +42,13 @@ services:
     build: ./go-parser
     environment:
       SLIDE_CACHE_DIR: /data/slides
+      TRON_SDK_PATH: ${TRON_SDK_PATH:-/opt/vendor/tron/libtronc.so}
+      HWP_SDK_PATH: ${HWP_SDK_PATH:-/opt/vendor/hwp/libhwp_sdk.so}
       TZ: Asia/Shanghai
     volumes:
       - slide_cache:/data/slides:ro
+      - ${TRON_SDK_DIR:-./vendor-libs-local/tron}:/opt/vendor/tron:ro
+      - ${HWP_SDK_DIR:-./vendor-libs-local/hwp}:/opt/vendor/hwp:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
       interval: 10s

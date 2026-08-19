@@ -200,13 +200,13 @@ ADAPTERS: list[SlideAdapter] = [
     OpenSlideAdapter(),
     GoParserAdapter("KFB", ".kfb"),
     GoParserAdapter("SDPC", ".sdpc"),
-    VendorAdapter("TRON", {".tron"}),
+    GoParserAdapter("TRON", ".tron"),
     GoParserAdapter("MDSX", ".mdsx"),
     GoParserAdapter("TMAP", ".tmap"),
     GoParserAdapter("DMETRIX", ".dmetrix"),
     GoParserAdapter("FENLAN", ".fenlan"),
     GoParserAdapter("ZYP", ".zyp"),
-    VendorAdapter("HWP", {".hwp"}),
+    GoParserAdapter("HWP", ".hwp"),
     GoParserAdapter("CSP", ".csp"),
 ]
 

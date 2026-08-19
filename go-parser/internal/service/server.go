@@ -63,7 +63,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 			parserCount++
 		}
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": false})
+	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": registry.CGOEnabled()})
 }
 
 func (s *Server) formats(w http.ResponseWriter, _ *http.Request) {

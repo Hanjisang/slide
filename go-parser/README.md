@@ -1,6 +1,6 @@
 # Go Multi-format Slide Parser
 
-内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认构建为 Linux amd64/CGO disabled，不直接访问 MinIO，也不对公网暴露。
+内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认构建为 Linux amd64/CGO enabled，使用 Debian/glibc 运行时以兼容常见厂家 `.so`，不直接访问 MinIO，也不对公网暴露。
 
 ## 支持状态
 
@@ -9,7 +9,7 @@
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和做损坏输入测试，缺真实厂商文件 L3-L5 验收 |
 | SDPC | Go Native | `DECODER_REQUIRED` | 结构和 JPEG/BMP 路径可构建；HEVC 缺 `libDecodeHevc.so` |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建不包含 |
-| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺运行所需 Linux SDK |
+| HWP / TRON | Go Runtime SDK | `SDK_REQUIRED` | 通过环境变量可选 dlopen；当前缺 Linux SDK 与样本 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 
@@ -17,7 +17,7 @@ SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析�
 
 ```bash
 go test ./...
-CGO_ENABLED=0 go build -o go-parser ./cmd/server
+CGO_ENABLED=1 go build -o go-parser ./cmd/server
 docker build -t medical-go-parser:0.3.0 .
 ```
 
@@ -50,7 +50,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。当前 Dockerfile 不会自动链接其中内容。接入 CSP/HWP/TRON 或 SDPC HEVC 时，必须同时提供：合法授权、Linux amd64 库、受控 build tag/adapter、缺库时仍可构建的隔离路径，以及真实文件 L3-L5 验收。不得直接提交 `.so`、`.dll` 或厂家头文件。
+`vendor-libs-local/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。TRON/HWP 分别通过 `TRON_SDK_PATH`、`HWP_SDK_PATH` 在运行时加载，不 COPY 到镜像。接入厂家 SDK 必须同时提供合法授权、Linux amd64 库和真实文件 L3-L5 验收；不得直接提交 `.so`、`.dll` 或厂家头文件。
 
 ## 测试数据
 

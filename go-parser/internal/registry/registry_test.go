@@ -43,3 +43,11 @@ func TestOptionalSDKFormatsRemainIsolated(t *testing.T) {
 		t.Fatalf("expected isolated SDK_REQUIRED capability, got %q / %v", capability.Status, err)
 	}
 }
+
+func TestOptionalSDKFormatsRemainBuildableWithoutLibraries(t *testing.T) {
+	for _, format := range New().Formats() {
+		if (format.Format == "HWP" || format.Format == "TRON") && format.Status == StatusSDKPresent {
+			t.Fatalf("%s unexpectedly claims SDK_PRESENT in a test environment without a checked-in SDK", format.Format)
+		}
+	}
+}
