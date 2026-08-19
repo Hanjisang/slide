@@ -35,7 +35,5 @@ mysql-data/
 *.csp
 
 /parser.zip
-/go-parser/hwp.zip
-/go-parser/tron.zip
 /go-parser/vendor-libs/
 /vendor-libs-local/**

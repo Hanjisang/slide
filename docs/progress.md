@@ -6,7 +6,7 @@
 
 - 统一监控快照、基础服务/资源/存储/任务/队列告警规则、防抖去重和自动恢复。
 - AppLayout 全局告警轮询、铃铛数量和 sessionStorage 通知去重。
-- 已接收并解包 TRON/HWP Linux SDK 到忽略目录；HWP 接入 CGO 适配器，TRON 完成符号探测但缺公开 ABI。两者均缺真实样本，不能标记 `AVAILABLE`。
+- 已将 TRON/HWP SDK 压缩包纳入 Go Parser Docker 构建；HWP 接入 CGO 适配器，TRON 完成符号探测但缺公开 ABI。两者均缺真实样本，不能标记 `AVAILABLE`。
 
 ## v0.3.0 多格式解析已完成工程化
 
@@ -15,7 +15,7 @@
 - P24：Python `GoParserAdapter`、动态能力发现、30/15 秒调用超时与 Go Down 降级完成；SVS 继续由 OpenSlide 处理。
 - P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；因无真实厂商文件，状态严格保留 `TEST_DATA_REQUIRED`。
 - P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
-- P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
+- P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON SDK 在 Docker 构建阶段提取并隔离加载。
 - P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。
 
 ## v0.2.0 基线已完成

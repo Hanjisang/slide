@@ -51,7 +51,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs-local/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。当前本机压缩包解包后的默认路径是 `vendor-libs-local/hwp/libhwp_sdk.so` 和 `vendor-libs-local/tron/libtronc.so`；Compose 以只读方式挂载。TRON/HWP 分别通过 `TRON_SDK_PATH`、`HWP_SDK_PATH` 在运行时加载，不 COPY 到镜像。不得直接提交 `.so`、`.dll` 或厂家头文件。
+`hwp.zip` 和 `tron.zip` 随本模块提交，Docker 构建阶段会只提取 Linux amd64 的 `.so` 到 `/opt/vendor/{hwp,tron}`，最终镜像不包含压缩包或 Windows DLL。容器通过 `HWP_SDK_PATH`、`TRON_SDK_PATH` 加载镜像内 SDK，运维无需额外挂载目录。不得直接提交厂家头文件或未授权的其它 SDK 文件。
 
 ## 测试数据
 
