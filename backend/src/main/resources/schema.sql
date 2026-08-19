@@ -200,6 +200,7 @@ CREATE TABLE IF NOT EXISTS report_plan (
 );
 CREATE TABLE IF NOT EXISTS alert_rule (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, rule_type VARCHAR(50) NOT NULL, threshold_value DECIMAL(12,2),
+  recovery_threshold DECIMAL(12,2), trigger_count INT NOT NULL DEFAULT 1, recovery_count INT NOT NULL DEFAULT 1,
   severity VARCHAR(20) NOT NULL, enabled TINYINT NOT NULL DEFAULT 1,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -207,7 +208,11 @@ CREATE TABLE IF NOT EXISTS alert_event (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, rule_id BIGINT, event_type VARCHAR(50) NOT NULL, severity VARCHAR(20) NOT NULL,
   source_type VARCHAR(30), source_id BIGINT, message VARCHAR(1000) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
   acknowledged_by VARCHAR(64), acknowledged_at DATETIME, closed_by VARCHAR(64), closed_at DATETIME,
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  dedup_key VARCHAR(191), active_key VARCHAR(191), first_seen_at DATETIME, last_seen_at DATETIME,
+  occurrence_count INT NOT NULL DEFAULT 1, breach_count INT NOT NULL DEFAULT 1, healthy_count INT NOT NULL DEFAULT 0,
+  recovered_at DATETIME, recovery_message VARCHAR(1000),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_alert_event_active_key(active_key)
 );
 
 CREATE DATABASE IF NOT EXISTS mock_hospital CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -232,7 +237,44 @@ CREATE TABLE IF NOT EXISTS mock_hospital.mock_lis_result (
 INSERT IGNORE INTO system_config(config_key, config_value, description) VALUES
 ('platform.name', '医疗数据及数字病理上报平台', '平台名称'), ('collect.enabled', 'true', '是否启用自动采集'), ('report.retry.enabled', 'true', '是否启用上报重试');
 INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
-SELECT '磁盘使用率告警','DISK_USAGE',90,'CRITICAL',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='DISK_USAGE');
+SELECT 'CPU 使用率过高','CPU_USAGE_HIGH',90,'WARNING',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='CPU_USAGE_HIGH');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT '内存使用率过高','MEMORY_USAGE_HIGH',90,'WARNING',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='MEMORY_USAGE_HIGH');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT '磁盘使用率过高','DISK_USAGE_HIGH',85,'WARNING',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='DISK_USAGE_HIGH');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT 'JVM Heap 使用率过高','JVM_HEAP_USAGE_HIGH',90,'WARNING',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='JVM_HEAP_USAGE_HIGH');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT 'MySQL 不可用','MYSQL_DOWN',1,'CRITICAL',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='MYSQL_DOWN');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT 'MinIO 不可用','MINIO_DOWN',1,'CRITICAL',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='MINIO_DOWN');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT 'Slide Worker 不可用','SLIDE_WORKER_DOWN',1,'CRITICAL',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='SLIDE_WORKER_DOWN');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT 'Go Parser 不可用','GO_PARSER_DOWN',1,'WARNING',1 WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type='GO_PARSER_DOWN');
+INSERT INTO alert_rule(name,rule_type,threshold_value,severity,enabled)
+SELECT label,type_name,threshold_value,severity,1 FROM (
+  SELECT '存储目标不可用' label,'STORAGE_TARGET_DOWN' type_name,1 threshold_value,0 recovery_threshold,2 trigger_count,2 recovery_count,'CRITICAL' severity UNION ALL
+  SELECT '存储读取失败','STORAGE_READ_FAILED',1,0,2,2,'CRITICAL' UNION ALL
+  SELECT '存储写入失败','STORAGE_WRITE_FAILED',1,0,2,2,'CRITICAL' UNION ALL
+  SELECT '存储使用率过高','STORAGE_USAGE_HIGH',85,80,2,2,'WARNING' UNION ALL
+  SELECT '采集失败','COLLECT_FAILED',1,0,1,1,'WARNING' UNION ALL
+  SELECT '切片解析失败','SLIDE_PARSE_FAILED',1,0,1,1,'WARNING' UNION ALL
+  SELECT '归档失败','ARCHIVE_FAILED',1,0,1,1,'WARNING' UNION ALL
+  SELECT '备份失败','BACKUP_FAILED',1,0,1,1,'WARNING' UNION ALL
+  SELECT '上报失败','REPORT_FAILED',1,0,1,1,'WARNING' UNION ALL
+  SELECT '采集任务卡住','COLLECT_STUCK',30,0,2,2,'WARNING' UNION ALL
+  SELECT '切片解析卡住','SLIDE_PARSE_STUCK',30,0,2,2,'WARNING' UNION ALL
+  SELECT '归档任务卡住','ARCHIVE_STUCK',30,0,2,2,'WARNING' UNION ALL
+  SELECT '备份任务卡住','BACKUP_STUCK',30,0,2,2,'WARNING' UNION ALL
+  SELECT '上报任务卡住','REPORT_STUCK',30,0,2,2,'WARNING' UNION ALL
+  SELECT '采集队列积压','COLLECT_QUEUE_BACKLOG',100,0,2,2,'WARNING' UNION ALL
+  SELECT '切片队列积压','SLIDE_QUEUE_BACKLOG',100,0,2,2,'WARNING' UNION ALL
+  SELECT '上报队列积压','REPORT_QUEUE_BACKLOG',100,0,2,2,'WARNING' UNION ALL
+  SELECT '归档队列积压','ARCHIVE_QUEUE_BACKLOG',100,0,2,2,'WARNING' UNION ALL
+  SELECT '备份队列积压','BACKUP_QUEUE_BACKLOG',100,0,2,2,'WARNING' UNION ALL
+  SELECT 'Parser 格式连续失败','PARSER_FORMAT_FAILED',5,0,1,1,'WARNING'
+) d WHERE NOT EXISTS(SELECT 1 FROM alert_rule WHERE rule_type=d.type_name);
 INSERT IGNORE INTO dictionary(id, dict_type, name, description) VALUES (1, 'SEX', '性别字典', '医院性别编码标准化');
 INSERT IGNORE INTO dictionary(dict_type, name, description) VALUES
 ('SPECIMEN_TYPE', '标本类型', '数字病理标本类型'),

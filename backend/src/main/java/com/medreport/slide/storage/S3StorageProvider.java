@@ -94,6 +94,21 @@ public class S3StorageProvider implements StorageProvider {
         }catch(Exception ex){throw new BizException("存储统计失败: "+ex.getMessage());}
     }
 
+    public Map<String,Object> probe(StorageTarget target){
+        ensureS3(target);
+        try {
+            long bytes=0,objects=0;
+            MinioClient client=client(target);
+            if(!client.bucketExists(BucketExistsArgs.builder().bucket(target.bucket()).build()))throw new BizException("Bucket 不存在");
+            for(Result<io.minio.messages.Item> result:client.listObjects(ListObjectsArgs.builder().bucket(target.bucket()).recursive(true).build())){
+                io.minio.messages.Item item=result.get();bytes+=item.size();objects++;
+            }
+            Map<String,Object> probe=new LinkedHashMap<>();probe.put("usedBytes",bytes);probe.put("objectCount",objects);
+            probe.put("capacityBytes","UNKNOWN");probe.put("availableBytes","UNKNOWN");probe.put("readStatus","UP");probe.put("writeStatus","NOT_TESTED");
+            return probe;
+        } catch(Exception ex){throw ex instanceof BizException biz?biz:new BizException("存储探测失败: "+ex.getMessage());}
+    }
+
     private void ensureBucket(MinioClient client, String bucket) throws Exception {
         if (!client.bucketExists(BucketExistsArgs.builder().bucket(bucket).build())) {
             client.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
