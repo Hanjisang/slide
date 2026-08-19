@@ -4,12 +4,6 @@ package hwp
 
 import "errors"
 
-const (
-	imagePreview = iota
-	imageLabel
-	imageThumb
-)
-
 func runtimeOpen(string) (uintptr, error) { return 0, errors.New("HWP SDK requires Linux CGO") }
 func runtimeClose(uintptr)                {}
 func runtimeConfig(uintptr) (config, error) {

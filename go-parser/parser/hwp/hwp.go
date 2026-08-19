@@ -14,6 +14,13 @@ import (
 
 var errUnavailable = errors.New("HWP_SDK_UNAVAILABLE")
 
+// Named image kinds are shared by the CGO and non-CGO runtime implementations.
+const (
+	imagePreview = iota
+	imageLabel
+	imageThumb
+)
+
 type parser struct {
 	streamer streamer.Streamer
 	reader   uintptr
