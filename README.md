@@ -104,7 +104,8 @@ docker compose down
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
 | SDPC | Go Native | `DECODER_REQUIRED` | JPEG/BMP 路径可构建；HEVC 缺 decoder，且缺真实样本 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
-| HWP / TRON | Go Runtime SDK | `SDK_REQUIRED` | 可选 dlopen，当前缺 Linux SDK 与真实样本 |
+| HWP | Go Runtime SDK + CGO adapter | `SDK_PRESENT` / `SDK_REQUIRED` | 已接入配置、预览、标签、缩略图和 Tile；缺真实样本 |
+| TRON | Go Runtime SDK | `SDK_PRESENT` / `SDK_REQUIRED` | Linux 符号探测已完成；缺头文件/ABI 和真实样本 |
 
 代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
 

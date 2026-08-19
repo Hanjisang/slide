@@ -9,7 +9,8 @@
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和做损坏输入测试，缺真实厂商文件 L3-L5 验收 |
 | SDPC | Go Native | `DECODER_REQUIRED` | 结构和 JPEG/BMP 路径可构建；HEVC 缺 `libDecodeHevc.so` |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建不包含 |
-| HWP / TRON | Go Runtime SDK | `SDK_REQUIRED` | 通过环境变量可选 dlopen；当前缺 Linux SDK 与样本 |
+| HWP | Go Runtime SDK + CGO adapter | `SDK_PRESENT` / `SDK_REQUIRED` | 已接入配置、预览、标签、缩略图和 Tile；需真实样本完成验收 |
+| TRON | Go Runtime SDK | `SDK_PRESENT` / `SDK_REQUIRED` | 已校验 Linux 导出符号；缺头文件/ABI 和真实样本，暂不调用 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 
@@ -50,7 +51,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs-local/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。TRON/HWP 分别通过 `TRON_SDK_PATH`、`HWP_SDK_PATH` 在运行时加载，不 COPY 到镜像。接入厂家 SDK 必须同时提供合法授权、Linux amd64 库和真实文件 L3-L5 验收；不得直接提交 `.so`、`.dll` 或厂家头文件。
+`vendor-libs-local/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。当前本机压缩包解包后的默认路径是 `vendor-libs-local/hwp/libhwp_sdk.so` 和 `vendor-libs-local/tron/libtronc.so`；Compose 以只读方式挂载。TRON/HWP 分别通过 `TRON_SDK_PATH`、`HWP_SDK_PATH` 在运行时加载，不 COPY 到镜像。不得直接提交 `.so`、`.dll` 或厂家头文件。
 
 ## 测试数据
 

@@ -6,7 +6,7 @@
 
 - 统一监控快照、基础服务/资源/存储/任务/队列告警规则、防抖去重和自动恢复。
 - AppLayout 全局告警轮询、铃铛数量和 sessionStorage 通知去重。
-- TRON/HWP 改为可选运行时 SDK 探测；本机未发现 SDK 或真实样本，状态保持 `SDK_REQUIRED`。
+- 已接收并解包 TRON/HWP Linux SDK 到忽略目录；HWP 接入 CGO 适配器，TRON 完成符号探测但缺公开 ABI。两者均缺真实样本，不能标记 `AVAILABLE`。
 
 ## v0.3.0 多格式解析已完成工程化
 
