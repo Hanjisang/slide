@@ -41,7 +41,7 @@ Go Parser 使用 `net/http` 提供 health、formats、analyze、thumbnail、labe
 
 ParserCache 的键包含路径、文件大小和 mtime，TTL 30 分钟，最多 128 项。每个切片条目有独立互斥锁；不同切片可以并发。浏览器层级统一为低分辨率 0 到高分辨率 maxLevel，Tile 统一输出 256 x 256 JPEG，边缘白色补齐。
 
-默认 Go 镜像 `CGO_ENABLED=0`。SDPC 的 HEVC decoder、CSP、HWP 和 TRON 作为可选能力隔离，缺少其中任何一个都不能阻止服务构建或启动。详细边界见 `docs/v0.3-parser-architecture.md`。
+默认 Go 镜像 `CGO_ENABLED=1`。TRON/HWP 仅通过运行时 `dlopen/dlsym` 探测 SDK；SDPC HEVC decoder 与 CSP 仍作为可选能力隔离，缺少任一依赖都不能阻止服务构建或启动。详细边界见 `docs/v0.3-parser-architecture.md`。
 
 ## v0.2 局部重构
 

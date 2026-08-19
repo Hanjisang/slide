@@ -1,6 +1,8 @@
-# 医疗数据治理及数字病理全生命周期上报平台 v0.3.0
+# 医疗数据治理及数字病理全生命周期上报平台 v0.3.1
 
 面向医院信息化场景的可运行 MVP，覆盖医疗数据治理、数字切片全生命周期、文件版本与备份、病理数据和真实切片一键上报，并新增可独立运行的 Go 多格式切片解析服务。
+
+v0.3.1 统一系统监控与告警数据源，覆盖基础服务、资源、存储目标、任务和队列，并提供防抖、去重、自动恢复、全局通知及 MySQL 不可写时的内存故障缓冲。TRON/HWP 使用可选运行时 SDK 路径，不提交第三方库；当前环境没有对应 SDK 或真实样本，因此不会虚报格式可用。
 
 ## 系统架构
 
@@ -102,7 +104,7 @@ docker compose down
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
 | SDPC | Go Native | `DECODER_REQUIRED` | JPEG/BMP 路径可构建；HEVC 缺 decoder，且缺真实样本 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
-| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺 Linux SDK 与真实样本 |
+| HWP / TRON | Go Runtime SDK | `SDK_REQUIRED` | 可选 dlopen，当前缺 Linux SDK 与真实样本 |
 
 代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
 

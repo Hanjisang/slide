@@ -1,6 +1,12 @@
 # 实施进度
 
-更新时间：2026-08-18
+更新时间：2026-08-19
+
+## v0.3.1 监控告警与可选 SDK
+
+- 统一监控快照、基础服务/资源/存储/任务/队列告警规则、防抖去重和自动恢复。
+- AppLayout 全局告警轮询、铃铛数量和 sessionStorage 通知去重。
+- TRON/HWP 改为可选运行时 SDK 探测；本机未发现 SDK 或真实样本，状态保持 `SDK_REQUIRED`。
 
 ## v0.3.0 多格式解析已完成工程化
 
@@ -27,9 +33,9 @@
 - `go test ./...`：通过；覆盖 11 个顶层测试，包括 Streamer 越界、截断厂家文件、Registry 状态、HTTP、256 JPEG 和 SDPC 分配边界。
 - `pytest`：4 passed；验证 Go 能力降级短缓存、固定缓存路径和 SVS 优先 OpenSlide。
 - `mvn -q test`：7 个测试类通过；`npm run build` 通过，仅有非阻断 bundle size warning。
-- Go Docker 镜像在 `CGO_ENABLED=0` 下通过测试与构建。
+- Go Docker 镜像在 v0.3.1 的 `CGO_ENABLED=1` 下通过测试与构建。
 - Docker Compose：MySQL、MinIO、go-parser、slide-worker、backend、frontend、nginx 七服务运行。
-- Go health：`UP`、7 个已注册 Parser、`cgo=false`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
+- Go health：`UP`、7 个已注册 Parser、`cgo=true`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
 - 真实 SVS：`CMU-1-Small-Region.svs`，1,938,955 bytes，2220 x 2967；metadata、thumbnail、两个 Tile 和 OpenSeadragon 通过。
 - Go Down：Worker 保持 `UP`，SVS metadata/Tile 继续成功；Go 格式能力降级为 `PARSER_UNAVAILABLE`。
 - 浏览器：11 格式能力矩阵和 Go Parser 监控正常；桌面与 390 x 844 无页面级横向溢出。
