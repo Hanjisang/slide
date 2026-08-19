@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS report_batch (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, batch_no VARCHAR(100) NOT NULL UNIQUE, template_id BIGINT, report_type VARCHAR(50) NOT NULL, format VARCHAR(20) NOT NULL,
   total_count INT NOT NULL DEFAULT 0, success_count INT NOT NULL DEFAULT 0, failed_count INT NOT NULL DEFAULT 0, status VARCHAR(20) NOT NULL,
   file_path VARCHAR(1000), sender_type VARCHAR(20), endpoint VARCHAR(1000), retry_count INT NOT NULL DEFAULT 0, next_retry_time DATETIME,
-  last_error VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  last_error VARCHAR(1000), report_spec_id BIGINT, report_job_id BIGINT, precheck_status VARCHAR(30), transfer_status VARCHAR(30), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   reported_at DATETIME
 );
 CREATE TABLE IF NOT EXISTS report_record (
@@ -195,8 +195,83 @@ CREATE TABLE IF NOT EXISTS backup_task (
 );
 CREATE TABLE IF NOT EXISTS report_plan (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, template_id BIGINT NOT NULL, frequency_type VARCHAR(20) NOT NULL,
-  cron_expression VARCHAR(100), enabled TINYINT NOT NULL DEFAULT 1, last_run_time DATETIME, next_run_time DATETIME,
+  cron_expression VARCHAR(100), spec_id BIGINT, priority INT NOT NULL DEFAULT 5, max_retry INT NOT NULL DEFAULT 4,
+  retry_policy VARCHAR(30) NOT NULL DEFAULT 'FIXED', execution_timeout_minutes INT NOT NULL DEFAULT 60,
+  concurrency_policy VARCHAR(20) NOT NULL DEFAULT 'QUEUE', enabled TINYINT NOT NULL DEFAULT 1, last_run_time DATETIME, next_run_time DATETIME,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS report_spec (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, spec_code VARCHAR(64) NOT NULL, spec_name VARCHAR(100) NOT NULL,
+  authority_name VARCHAR(200), region_code VARCHAR(50), business_type VARCHAR(50) NOT NULL DEFAULT 'PATHOLOGY',
+  version VARCHAR(30) NOT NULL, effective_from DATE, effective_to DATE, file_format VARCHAR(20) NOT NULL DEFAULT 'JSON',
+  encoding VARCHAR(30) NOT NULL DEFAULT 'UTF-8', compression_type VARCHAR(20) NOT NULL DEFAULT 'NONE',
+  file_naming_rule VARCHAR(255), transport_mode VARCHAR(30) NOT NULL DEFAULT 'HTTP', default_frequency VARCHAR(30),
+  demo TINYINT NOT NULL DEFAULT 1, enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_report_spec_version(spec_code, version)
+);
+CREATE TABLE IF NOT EXISTS report_spec_field (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, spec_id BIGINT NOT NULL, dataset_code VARCHAR(50) NOT NULL,
+  field_code VARCHAR(100) NOT NULL, field_name VARCHAR(100) NOT NULL, source_expression VARCHAR(255),
+  data_type VARCHAR(30) NOT NULL DEFAULT 'STRING', required TINYINT NOT NULL DEFAULT 0, max_length INT,
+  dictionary_type VARCHAR(100), format_pattern VARCHAR(100), transform_type VARCHAR(30), default_value VARCHAR(255),
+  sort_order INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1,
+  UNIQUE KEY uk_report_spec_field(spec_id,dataset_code,field_code)
+);
+CREATE TABLE IF NOT EXISTS report_endpoint (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, endpoint_url VARCHAR(1000),
+  transport_mode VARCHAR(30) NOT NULL DEFAULT 'HTTP', auth_type VARCHAR(30) NOT NULL DEFAULT 'NONE',
+  username VARCHAR(100), password_encrypted VARCHAR(500), token_encrypted VARCHAR(1000),
+  client_cert_path VARCHAR(1000), client_key_path VARCHAR(1000), trust_store_path VARCHAR(1000), tls_verify TINYINT NOT NULL DEFAULT 1,
+  enabled TINYINT NOT NULL DEFAULT 1, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_job (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, job_no VARCHAR(100) NOT NULL UNIQUE, plan_id BIGINT, spec_id BIGINT,
+  trigger_type VARCHAR(30) NOT NULL, scheduled_at DATETIME NOT NULL, priority INT NOT NULL DEFAULT 5,
+  status VARCHAR(30) NOT NULL DEFAULT 'WAITING', started_at DATETIME, finished_at DATETIME, batch_id BIGINT,
+  attempt_count INT NOT NULL DEFAULT 0, result_message VARCHAR(1000), error_message VARCHAR(1000),
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_report_job_schedule(plan_id,scheduled_at), KEY idx_report_job_queue(status,priority,scheduled_at)
+);
+CREATE TABLE IF NOT EXISTS report_job_item (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, job_id BIGINT NOT NULL, business_type VARCHAR(50) NOT NULL, business_id BIGINT NOT NULL,
+  snapshot_version VARCHAR(64) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'SNAPSHOT', created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_report_job_item(job_id,business_type,business_id)
+);
+CREATE TABLE IF NOT EXISTS report_precheck_rule (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, spec_id BIGINT NOT NULL, dataset_code VARCHAR(50), field_code VARCHAR(100),
+  rule_type VARCHAR(30) NOT NULL, rule_config VARCHAR(500), severity VARCHAR(20) NOT NULL DEFAULT 'ERROR',
+  error_message VARCHAR(255) NOT NULL, suggestion VARCHAR(500), enabled TINYINT NOT NULL DEFAULT 1,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_precheck (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, job_id BIGINT NOT NULL, batch_id BIGINT, spec_id BIGINT,
+  status VARCHAR(30) NOT NULL, total_count INT NOT NULL DEFAULT 0, passed_count INT NOT NULL DEFAULT 0,
+  failed_count INT NOT NULL DEFAULT 0, warning_count INT NOT NULL DEFAULT 0, started_at DATETIME, finished_at DATETIME,
+  operator VARCHAR(64), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_precheck_issue (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, precheck_id BIGINT NOT NULL, business_type VARCHAR(50), business_id BIGINT,
+  dataset_code VARCHAR(50), field_code VARCHAR(100), rule_id BIGINT, rule_type VARCHAR(30), current_value TEXT,
+  error_message VARCHAR(500) NOT NULL, suggestion VARCHAR(500), severity VARCHAR(20) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'OPEN',
+  handled_by VARCHAR(64), handled_at DATETIME, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_data_override (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, job_id BIGINT NOT NULL, batch_id BIGINT, business_type VARCHAR(50), business_id BIGINT,
+  dataset_code VARCHAR(50), field_path VARCHAR(255), old_value TEXT, new_value TEXT, reason VARCHAR(500), operator VARCHAR(64), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_transfer_session (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, job_id BIGINT, batch_id BIGINT, sender_type VARCHAR(30) NOT NULL, endpoint VARCHAR(1000),
+  remote_upload_id VARCHAR(255), file_path VARCHAR(1000) NOT NULL, total_bytes BIGINT NOT NULL, uploaded_bytes BIGINT NOT NULL DEFAULT 0,
+  chunk_size INT NOT NULL DEFAULT 8388608, total_chunks INT NOT NULL DEFAULT 0, completed_chunks INT NOT NULL DEFAULT 0, whole_sha256 CHAR(64),
+  status VARCHAR(30) NOT NULL DEFAULT 'INIT', started_at DATETIME, last_activity_at DATETIME, completed_at DATETIME,
+  retry_count INT NOT NULL DEFAULT 0, last_error VARCHAR(1000), created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS report_transfer_chunk (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT, session_id BIGINT NOT NULL, chunk_index INT NOT NULL, offset_bytes BIGINT NOT NULL,
+  chunk_size INT NOT NULL, sha256 CHAR(64), status VARCHAR(20) NOT NULL DEFAULT 'PENDING', attempt_count INT NOT NULL DEFAULT 0,
+  uploaded_at DATETIME, last_error VARCHAR(1000), UNIQUE KEY uk_transfer_chunk(session_id,chunk_index)
 );
 CREATE TABLE IF NOT EXISTS alert_rule (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(100) NOT NULL, rule_type VARCHAR(50) NOT NULL, threshold_value DECIMAL(12,2),
@@ -294,13 +369,18 @@ INSERT IGNORE INTO sys_permission(permission_code,permission_name) VALUES
 ('SLIDE_VIEW','查看切片'),('SLIDE_UPLOAD','上传切片'),('SLIDE_DOWNLOAD','下载切片'),('SLIDE_RENAME','重命名切片'),
 ('SLIDE_DELETE','删除切片'),('SLIDE_ARCHIVE','归档切片'),('DATA_VIEW','查看医疗数据'),('DATA_EDIT','编辑医疗数据'),
 ('QUALITY_MANAGE','质量管理'),('REPORT_GENERATE','生成上报'),('REPORT_SEND','发送上报'),('FILE_MANAGE','文件管理'),
-('DICT_MANAGE','字典管理'),('USER_MANAGE','用户管理'),('SYSTEM_CONFIG','系统配置'),('LOG_VIEW','查看日志'),('MONITOR_VIEW','查看监控');
+('DICT_MANAGE','字典管理'),('USER_MANAGE','用户管理'),('SYSTEM_CONFIG','系统配置'),('LOG_VIEW','查看日志'),('MONITOR_VIEW','查看监控'),
+('REPORT_SPEC_MANAGE','上报规范管理'),('REPORT_PLAN_MANAGE','上报计划管理'),('REPORT_PRECHECK','上报预审核'),('REPORT_PRECHECK_OVERRIDE','预审核覆盖'),('REPORT_TRANSFER_MANAGE','传输管理'),('REPORT_ENDPOINT_MANAGE','上报端点管理');
 INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
 SELECT r.id,p.id FROM sys_role r CROSS JOIN sys_permission p WHERE r.role_code='ADMIN';
 INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
 SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
 ('SLIDE_VIEW','SLIDE_UPLOAD','SLIDE_DOWNLOAD','SLIDE_RENAME','SLIDE_DELETE','SLIDE_ARCHIVE','DATA_VIEW','DATA_EDIT','QUALITY_MANAGE','REPORT_GENERATE','REPORT_SEND','FILE_MANAGE')
 WHERE r.role_code='OPERATOR';
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN ('REPORT_PRECHECK','REPORT_TRANSFER_MANAGE') WHERE r.role_code='OPERATOR';
+INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
+SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN ('REPORT_PRECHECK','REPORT_PRECHECK_OVERRIDE','REPORT_SPEC_MANAGE','REPORT_PLAN_MANAGE','REPORT_ENDPOINT_MANAGE','REPORT_TRANSFER_MANAGE') WHERE r.role_code='AUDITOR';
 INSERT IGNORE INTO sys_role_permission(role_id,permission_id)
 SELECT r.id,p.id FROM sys_role r JOIN sys_permission p ON p.permission_code IN
 ('SLIDE_VIEW','SLIDE_DOWNLOAD','DATA_VIEW','LOG_VIEW','MONITOR_VIEW') WHERE r.role_code='AUDITOR';
@@ -342,6 +422,27 @@ SELECT 'PATIENT','gender','CROSS_RECORD','patient_no','患者性别跨来源不�
 (SELECT 1 FROM validation_rule WHERE business_type='PATIENT' AND field_name='gender' AND rule_type='CROSS_RECORD');
 INSERT INTO report_template(id, name, report_type, format, sender_type, endpoint, enabled)
 SELECT 1, '患者数据 JSON 上报', 'PATIENT', 'JSON', 'HTTP', NULL, 1 WHERE NOT EXISTS (SELECT 1 FROM report_template WHERE id=1);
+INSERT INTO report_spec(spec_code,spec_name,authority_name,region_code,business_type,version,file_format,transport_mode,demo,enabled)
+SELECT 'DEMO_LOCAL_PATHOLOGY_V1','DEMO本地病理上报规范 V1','DEMO（非正式卫健委规范）','DEMO','PATIENT','1.0','JSON','HTTP',1,1
+WHERE NOT EXISTS (SELECT 1 FROM report_spec WHERE spec_code='DEMO_LOCAL_PATHOLOGY_V1' AND version='1.0');
+INSERT INTO report_spec_field(spec_id,dataset_code,field_code,field_name,source_expression,data_type,required,dictionary_type,sort_order)
+SELECT id,'PATIENT','name','患者姓名','name','STRING',1,NULL,1 FROM report_spec WHERE spec_code='DEMO_LOCAL_PATHOLOGY_V1' AND version='1.0'
+AND NOT EXISTS (SELECT 1 FROM report_spec_field f WHERE f.spec_id=report_spec.id AND f.field_code='name');
+INSERT INTO report_spec_field(spec_id,dataset_code,field_code,field_name,source_expression,data_type,required,dictionary_type,sort_order)
+SELECT id,'PATIENT','gender','性别','gender','STRING',1,'M,F,U',2 FROM report_spec WHERE spec_code='DEMO_LOCAL_PATHOLOGY_V1' AND version='1.0'
+AND NOT EXISTS (SELECT 1 FROM report_spec_field f WHERE f.spec_id=report_spec.id AND f.field_code='gender');
+INSERT INTO report_precheck_rule(spec_id,dataset_code,field_code,rule_type,rule_config,severity,error_message,suggestion)
+SELECT id,'PATIENT','name','REQUIRED',NULL,'ERROR','患者姓名不能为空','请补充患者姓名' FROM report_spec WHERE spec_code='DEMO_LOCAL_PATHOLOGY_V1' AND version='1.0'
+AND NOT EXISTS (SELECT 1 FROM report_precheck_rule r WHERE r.spec_id=report_spec.id AND r.field_code='name');
+INSERT INTO report_precheck_rule(spec_id,dataset_code,field_code,rule_type,rule_config,severity,error_message,suggestion)
+SELECT id,'PATIENT','gender','DICTIONARY','M,F,U','ERROR','性别不符合DEMO字典','请使用 M/F/U' FROM report_spec WHERE spec_code='DEMO_LOCAL_PATHOLOGY_V1' AND version='1.0'
+AND NOT EXISTS (SELECT 1 FROM report_precheck_rule r WHERE r.spec_id=report_spec.id AND r.field_code='gender');
+INSERT INTO alert_rule(name,rule_type,threshold_value,recovery_threshold,trigger_count,recovery_count,severity,enabled)
+SELECT '上报任务失败','REPORT_JOB_FAILED',1,0,1,1,'WARNING',1 WHERE NOT EXISTS (SELECT 1 FROM alert_rule WHERE rule_type='REPORT_JOB_FAILED');
+INSERT INTO alert_rule(name,rule_type,threshold_value,recovery_threshold,trigger_count,recovery_count,severity,enabled)
+SELECT '上报传输失败','REPORT_TRANSFER_FAILED',1,0,1,1,'WARNING',1 WHERE NOT EXISTS (SELECT 1 FROM alert_rule WHERE rule_type='REPORT_TRANSFER_FAILED');
+INSERT INTO alert_rule(name,rule_type,threshold_value,recovery_threshold,trigger_count,recovery_count,severity,enabled)
+SELECT '预审核阻断','REPORT_PRECHECK_BLOCKED',1,0,1,1,'WARNING',1 WHERE NOT EXISTS (SELECT 1 FROM alert_rule WHERE rule_type='REPORT_PRECHECK_BLOCKED');
 INSERT IGNORE INTO mock_hospital.mock_his_patient(id, patient_no, patient_name, sex_code, birthday, age, id_card, phone, update_time) VALUES
 (1, 'P20260001', '张三', '1', '1981-03-12', 45, '110101198103120011', '13800000001', NOW()),
 (2, 'P20260002', '异常示例', '1', '1991-05-20', 235, NULL, '13800000002', NOW());

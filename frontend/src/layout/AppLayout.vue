@@ -18,7 +18,7 @@ const menuGroups = [
   { label: '数据质量', icon: DocumentChecked, permissions: ['QUALITY_MANAGE'], children: [{ path: '/quality', label: '规则与异常' }] },
   { label: '数字切片', icon: Files, permissions: ['SLIDE_VIEW'], children: [{ path: '/slides', label: '切片管理与归档' }] },
   { label: '文件管理', icon: FolderOpened, permissions: ['FILE_MANAGE'], children: [{ path: '/files', label: '文件、版本与备份' }] },
-  { label: '数据上报', icon: Promotion, permissions: ['REPORT_GENERATE','DATA_VIEW'], children: [{ path: '/reports', label: '病例、批次与计划' }] },
+  { label: '数据上报', icon: Promotion, permissions: ['REPORT_GENERATE','DATA_VIEW'], children: [{ path: '/reports', label: '规范、预审核、任务与传输' }] },
   { label: '系统管理', icon: Setting, permissions: ['USER_MANAGE','SYSTEM_CONFIG','MONITOR_VIEW','LOG_VIEW','DICT_MANAGE'], children: [{ path: '/system', label: '配置、监控与告警', icon: Bell }] },
 ]
 const menus = computed(() => menuGroups.filter((item) => auth.hasAny(item.permissions)))

@@ -82,6 +82,9 @@ public class ReportService {
         Map<String, Object> batch = find(batchId);
         String status = String.valueOf(batch.get("status"));
         if (!Set.of("READY", "FAILED").contains(status)) throw new BizException("当前批次状态不允许上报");
+        if (batch.get("report_job_id") != null && !"PASSED".equals(String.valueOf(batch.get("precheck_status")))) {
+            throw new BizException("当前批次预审核未通过，禁止上报");
+        }
         String senderType = String.valueOf(batch.get("sender_type"));
         ReportSender sender = senders.stream().filter(item -> item.supports(senderType)).findFirst().orElseThrow(() -> new BizException("不支持的发送方式: " + senderType));
         String configuredEndpoint = batch.get("endpoint") == null ? null : String.valueOf(batch.get("endpoint"));
