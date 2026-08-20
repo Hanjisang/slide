@@ -16,7 +16,7 @@ client.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('medical_token')
       if (location.pathname !== '/login') location.href = '/login'
-    } else ElMessage.error(message)
+    } else if (error.config?.headers?.['X-Silent-Error'] !== 'true') ElMessage.error(message)
     return Promise.reject(error)
   },
 )

@@ -1,6 +1,6 @@
 # Go Multi-format Slide Parser
 
-内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认构建为 Linux amd64/CGO disabled，不直接访问 MinIO，也不对公网暴露。
+内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认构建为 Linux amd64/CGO enabled，使用 Debian/glibc 运行时以兼容常见厂家 `.so`，不直接访问 MinIO，也不对公网暴露。
 
 ## 支持状态
 
@@ -10,7 +10,8 @@
 | DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建不包含 |
-| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺运行所需 Linux SDK |
+| HWP | Go Runtime SDK + CGO adapter | `SDK_PRESENT` / `SDK_REQUIRED` | 已接入配置、预览、标签、缩略图和 Tile；需真实样本完成验收 |
+| TRON | Go Runtime SDK | `SDK_PRESENT` / `SDK_REQUIRED` | 已校验 Linux 导出符号；缺头文件/ABI 和真实样本，暂不调用 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 
@@ -18,7 +19,7 @@ SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析�
 
 ```bash
 go test ./...
-CGO_ENABLED=0 go build -o go-parser ./cmd/server
+CGO_ENABLED=1 go build -o go-parser ./cmd/server
 docker build -t medical-go-parser:0.3.0 .
 ```
 
@@ -51,7 +52,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。SDPC HEVC 默认使用 Alpine 仓库中的 FFmpeg 标准解码器，不链接厂商 `.so`；CSP/HWP/TRON 仍需合法授权、Linux amd64 库、受控 build tag/adapter。不得直接提交 `.so`、`.dll` 或厂家头文件。
+`hwp.zip` 和 `tron.zip` 随本模块提交，Docker 构建阶段会只提取 Linux amd64 的 `.so` 到 `/opt/vendor/{hwp,tron}`，最终镜像不包含压缩包或 Windows DLL。SDPC HEVC 使用 Debian 仓库中的 FFmpeg 标准解码器，不链接厂商 `.so`。容器通过 `HWP_SDK_PATH`、`TRON_SDK_PATH` 加载镜像内 SDK；不得直接提交厂家头文件或未授权的其它 SDK 文件。
 
 ## 测试数据
 

@@ -3,10 +3,6 @@ package com.medreport.system;
 import com.medreport.auth.RequirePermission;
 import com.medreport.common.ApiResponse;
 import com.medreport.common.BizException;
-import io.minio.ListObjectsArgs;
-import io.minio.MinioClient;
-import io.minio.Result;
-import io.minio.messages.Item;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,19 +16,19 @@ import java.util.*;
 @RequestMapping("/api/system")
 public class SystemController {
     private final JdbcTemplate jdbc;
-    private final MinioClient minio;
     private final RestClient worker;
     private final SystemConfigMapper configMapper;
     private final SystemMetricsService metricsService;
+    private final MonitoringSnapshotService snapshots;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public SystemController(JdbcTemplate jdbc, MinioClient minio, RestClient.Builder builder, SystemConfigMapper configMapper, SystemMetricsService metricsService,
+    public SystemController(JdbcTemplate jdbc, RestClient.Builder builder, SystemConfigMapper configMapper, SystemMetricsService metricsService, MonitoringSnapshotService snapshots,
                             @Value("${app.slide-worker-url}") String workerUrl) {
         this.jdbc = jdbc;
-        this.minio = minio;
         this.worker = builder.baseUrl(workerUrl).build();
         this.configMapper = configMapper;
         this.metricsService = metricsService;
+        this.snapshots = snapshots;
     }
 
     @GetMapping("/ping")
@@ -40,25 +36,12 @@ public class SystemController {
 
     @GetMapping("/health")
     @RequirePermission({"MONITOR_VIEW","DATA_VIEW"})
+    @SuppressWarnings("unchecked")
     public ApiResponse<Map<String, Object>> health() {
-        Map<String, Object> components = new LinkedHashMap<>();
-        components.put("mysql", checkMysql());
-        components.put("minio", storageHealth());
-        Map<String, Object> workerHealth = checkWorker();
-        components.put("slideWorker", workerHealth);
-        components.put("goParser", goParserHealth(workerHealth));
-        Map<String, Object> queues = new LinkedHashMap<>();
-        queues.put("pendingCollectTasks", count("SELECT COUNT(*) FROM collect_task WHERE enabled=1 AND (next_run_time IS NULL OR next_run_time<=NOW())"));
-        queues.put("failedCollectTasks", count("SELECT COUNT(*) FROM collect_log WHERE status='FAILED' AND created_at>=CURRENT_DATE"));
-        queues.put("pendingSlides", count("SELECT COUNT(*) FROM slide_file WHERE status IN ('UPLOADING','UPLOADED','PARSING')"));
-        queues.put("failedSlides", count("SELECT COUNT(*) FROM slide_file WHERE status='FAILED'"));
-        queues.put("pendingReports", count("SELECT COUNT(*) FROM report_batch WHERE status IN ('PENDING','GENERATING','READY','REPORTING')"));
-        queues.put("failedReports", count("SELECT COUNT(*) FROM report_batch WHERE status='FAILED'"));
-        queues.put("pendingArchiveTasks", count("SELECT COUNT(*) FROM archive_task WHERE status IN ('PENDING','COPYING','VERIFYING')"));
-        queues.put("failedArchiveTasks", count("SELECT COUNT(*) FROM archive_task WHERE status='FAILED'"));
-        queues.put("pendingBackupTasks", count("SELECT COUNT(*) FROM backup_task WHERE status IN ('PENDING','COPYING','VERIFYING')"));
-        queues.put("failedBackupTasks", count("SELECT COUNT(*) FROM backup_task WHERE status='FAILED'"));
-        return ApiResponse.ok(Map.of("components", components, "queues", queues));
+        Map<String,Object> snapshot=snapshots.snapshot();Map<String,Object> health=new LinkedHashMap<>();
+        health.put("components",snapshot.get("components"));health.put("queues",snapshot.get("queues"));
+        health.put("criticalAlerts",snapshot.get("criticalAlerts"));health.put("capturedAt",snapshot.get("capturedAt"));
+        return ApiResponse.ok(health);
     }
 
     @GetMapping("/dashboard")
@@ -154,38 +137,6 @@ public class SystemController {
                 INSERT IGNORE INTO sys_role_permission(role_id,permission_id) SELECT ?,id FROM sys_permission WHERE permission_code=?
                 """,id,String.valueOf(code));
         return ApiResponse.ok();
-    }
-
-    private Map<String, Object> checkMysql() {
-        try { jdbc.queryForObject("SELECT 1", Integer.class); return Map.of("status", "UP"); }
-        catch (Exception ex) { return Map.of("status", "DOWN", "message", ex.getMessage()); }
-    }
-
-    private Map<String, Object> checkWorker() {
-        try { Map<?, ?> result = worker.get().uri("/health").retrieve().body(Map.class); return Map.of("status", "UP", "detail", result == null ? Map.of() : result); }
-        catch (Exception ex) { return Map.of("status", "DOWN", "message", ex.getMessage()); }
-    }
-
-    private Map<String, Object> goParserHealth(Map<String, Object> workerHealth) {
-        Object detail = workerHealth.get("detail");
-        if (detail instanceof Map<?, ?> workerDetail && workerDetail.get("goParser") instanceof Map<?, ?> parser) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            parser.forEach((key, value) -> result.put(String.valueOf(key), value));
-            return result;
-        }
-        return Map.of("status", "DOWN", "message", "Slide Worker 未返回 Go Parser 状态");
-    }
-
-    private Map<String, Object> storageHealth() {
-        try {
-            long bytes = 0, objects = 0;
-            for (String bucket : List.of("pathology-original", "pathology-cache")) {
-                for (Result<Item> result : minio.listObjects(ListObjectsArgs.builder().bucket(bucket).recursive(true).build())) {
-                    Item item = result.get(); bytes += item.size(); objects++;
-                }
-            }
-            return Map.of("status", "UP", "usedBytes", bytes, "objectCount", objects, "slideCount", count("SELECT COUNT(*) FROM slide_file"));
-        } catch (Exception ex) { return Map.of("status", "DOWN", "message", ex.getMessage()); }
     }
 
     private long count(String sql) { Number value = jdbc.queryForObject(sql, Number.class); return value == null ? 0 : value.longValue(); }

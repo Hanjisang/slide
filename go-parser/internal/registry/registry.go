@@ -4,13 +4,16 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
 	"strings"
 
+	"imageparser/internal/vendorsdk"
 	"imageparser/parser/dmetrix"
 	"imageparser/parser/fenlan"
+	"imageparser/parser/hwp"
 	"imageparser/parser/kfb"
 	"imageparser/parser/mdsx"
 	"imageparser/parser/sdpc"
@@ -27,6 +30,8 @@ const (
 	StatusDecoderRequired  Status = "DECODER_REQUIRED"
 	StatusSDKBundled       Status = "SDK_BUNDLED"
 	StatusSDKRequired      Status = "SDK_REQUIRED"
+	StatusSDKPresent       Status = "SDK_PRESENT"
+	StatusFailed           Status = "FAILED"
 )
 
 type Capability struct {
@@ -53,6 +58,13 @@ type Registry struct {
 }
 
 func New() *Registry {
+	hwp := optionalSDK("HWP", ".hwp", "HWP_SDK_PATH", "/opt/vendor/hwp/libhwp_sdk.so", []string{"GetHwpReader", "DestroyHwpReader", "HwpReadPreview", "HwpReadLabel", "HwpReadThumb", "HwpReadConfig", "HwpReadImg"})
+	tron := optionalSDK("TRON", ".tron", "TRON_SDK_PATH", "/opt/vendor/tron/libtronc.so", []string{"tron_open", "tron_close", "tron_get_resolution", "tron_get_content_region", "tron_get_lod_level_range", "tron_get_tile_size", "tron_read_region", "tron_get_named_image_info", "tron_get_named_image_data"})
+	hwpEntry := entry{Capability: hwp}
+	if hwp.Status == StatusSDKPresent {
+		hwpEntry.newParser = hwpParser
+		hwpEntry.Build = true
+	}
 	entries := []entry{
 		{Capability: native("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
 		{Capability: native("TMAP", ".tmap"), newParser: tmap.New},
@@ -62,8 +74,8 @@ func New() *Registry {
 		{Capability: native("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
 		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
 		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusSDKBundled, Extensions: []string{".csp"}, Build: false, Missing: "authorized libcsp_sdk.so in vendor-libs", SourceIncluded: false}},
-		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".hwp"}, Build: false, Missing: "libhwp_sdk.so", SourceIncluded: false}},
-		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".tron"}, Build: false, Missing: "libtronc.so", SourceIncluded: false}},
+		hwpEntry,
+		{Capability: tron},
 	}
 	r := &Registry{byExtension: make(map[string]entry, len(entries))}
 	for _, item := range entries {
@@ -75,6 +87,38 @@ func New() *Registry {
 	sort.Slice(r.formats, func(i, j int) bool { return r.formats[i].Format < r.formats[j].Format })
 	return r
 }
+
+func hwpParser(s streamer.Streamer) (types.ImageParser, error) { return hwp.New(s) }
+
+func optionalSDK(format, extension, envName, fallback string, symbols []string) Capability {
+	path := os.Getenv(envName)
+	if path == "" {
+		path = fallback
+	}
+	capability := Capability{Format: format, Engine: "GO_RUNTIME_SDK", Status: StatusSDKRequired, Extensions: []string{extension}, Build: false, Missing: path, SourceIncluded: false}
+	resolved := path
+	for _, candidate := range []string{path, filepath.Join(filepath.Dir(path), formatToDir(format), filepath.Base(path)), filepath.Join(filepath.Dir(path), formatToDir(format), "linux", filepath.Base(path))} {
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			resolved = candidate
+			break
+		}
+	}
+	if _, err := os.Stat(resolved); err != nil {
+		return capability
+	}
+	if err := vendorsdk.Probe(resolved, symbols); err != nil {
+		capability.Status = StatusFailed
+		capability.Missing = err.Error()
+		return capability
+	}
+	capability.Status = StatusSDKPresent
+	capability.Missing = "real vendor slide validation required"
+	return capability
+}
+
+func formatToDir(format string) string { return strings.ToLower(format) }
+
+func CGOEnabled() bool { return vendorsdk.Enabled() }
 
 func native(format, extension string) Capability {
 	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "real vendor slide for L3-L5 validation", SourceIncluded: true}

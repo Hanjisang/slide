@@ -41,7 +41,7 @@ docker compose exec go-parser wget -qO- http://localhost:8100/health
 - Go formats/health 超时 5 秒，metadata/thumbnail 30 秒，tile 15 秒。
 - Go Parser 健康检查失败不会阻止 Worker 启动；SVS 仍由 OpenSlide 处理。
 
-默认镜像不含任何厂家 `.so/.dll`，并以 `CGO_ENABLED=0` 构建。获合法授权的 SDK 可在本地放入被忽略的 `go-parser/vendor-libs/`，但当前 Dockerfile 不会自动链接；接入前必须实现可选 build tag/adapter 并完成实文件验收。
+Go Parser 镜像在 Docker 构建阶段从 `go-parser/hwp.zip`、`go-parser/tron.zip` 提取 Linux amd64 SDK 到 `/opt/vendor`，不需要运维额外挂载 SDK。Windows DLL 不进入镜像；真实文件验收通过前，HWP/TRON 仍不会标记 `AVAILABLE`。
 
 ## v0.2 存储目标
 

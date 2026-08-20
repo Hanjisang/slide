@@ -42,6 +42,8 @@ services:
     build: ./go-parser
     environment:
       SLIDE_CACHE_DIR: /data/slides
+      TRON_SDK_PATH: ${TRON_SDK_PATH:-/opt/vendor/tron/libtronc.so}
+      HWP_SDK_PATH: ${HWP_SDK_PATH:-/opt/vendor/hwp/libhwp_sdk.so}
       TZ: Asia/Shanghai
     volumes:
       - slide_cache:/data/slides:ro

@@ -1,6 +1,12 @@
 # 实施进度
 
-更新时间：2026-08-18
+更新时间：2026-08-19
+
+## v0.3.1 监控告警与可选 SDK
+
+- 统一监控快照、基础服务/资源/存储/任务/队列告警规则、防抖去重和自动恢复。
+- AppLayout 全局告警轮询、铃铛数量和 sessionStorage 通知去重。
+- 已将 TRON/HWP SDK 压缩包纳入 Go Parser Docker 构建；HWP 接入 CGO 适配器，TRON 完成符号探测但缺公开 ABI。两者均缺真实样本，不能标记 `AVAILABLE`。
 
 ## v0.3.0 多格式解析已完成工程化
 
@@ -11,6 +17,7 @@
 - P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
 - P34：确认真实 SDPC Tile 为标准 HEVC Annex-B；接入受控 FFmpeg 解码器，完成真实样本多层级、多坐标、边缘 Tile、性能和并发验证，状态升级为 `AVAILABLE`。
 - P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
+- P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON SDK 在 Docker 构建阶段提取并隔离加载。
 - P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。
 
 ## v0.2.0 基线已完成
@@ -28,9 +35,9 @@
 - `go test ./...`：通过；覆盖 11 个顶层测试，包括 Streamer 越界、截断厂家文件、Registry 状态、HTTP、256 JPEG 和 SDPC 分配边界。
 - `pytest`：4 passed；验证 Go 能力降级短缓存、固定缓存路径和 SVS 优先 OpenSlide。
 - `mvn -q test`：7 个测试类通过；`npm run build` 通过，仅有非阻断 bundle size warning。
-- Go Docker 镜像在 `CGO_ENABLED=0` 下通过测试与构建。
+- Go Docker 镜像在 v0.3.1 的 `CGO_ENABLED=1` 下通过测试与构建。
 - Docker Compose：MySQL、MinIO、go-parser、slide-worker、backend、frontend、nginx 七服务运行。
-- Go health：`UP`、7 个已注册 Parser、`cgo=false`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
+- Go health：`UP`、7 个已注册 Parser、`cgo=true`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
 - 真实 SVS：`CMU-1-Small-Region.svs`，1,938,955 bytes，2220 x 2967；metadata、thumbnail、两个 Tile 和 OpenSeadragon 通过。
 - Go Down：Worker 保持 `UP`，SVS metadata/Tile 继续成功；Go 格式能力降级为 `PARSER_UNAVAILABLE`。
 - 浏览器：11 格式能力矩阵和 Go Parser 监控正常；桌面与 390 x 844 无页面级横向溢出。

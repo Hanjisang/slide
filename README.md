@@ -1,6 +1,8 @@
-# 医疗数据治理及数字病理全生命周期上报平台 v0.3.0
+# 医疗数据治理及数字病理全生命周期上报平台 v0.3.1
 
 面向医院信息化场景的可运行 MVP，覆盖医疗数据治理、数字切片全生命周期、文件版本与备份、病理数据和真实切片一键上报，并新增可独立运行的 Go 多格式切片解析服务。
+
+v0.3.1 统一系统监控与告警数据源，覆盖基础服务、资源、存储目标、任务和队列，并提供防抖、去重、自动恢复、全局通知及 MySQL 不可写时的内存故障缓冲。Docker 构建会将已授权提供的 TRON/HWP Linux SDK 打包进 Go Parser 镜像；真实样本验收前不会虚报格式可用。
 
 ## 系统架构
 
@@ -103,7 +105,8 @@ docker compose down
 | DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
-| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺 Linux SDK 与真实样本 |
+| HWP | Go Runtime SDK + CGO adapter | `SDK_PRESENT` / `SDK_REQUIRED` | 已接入配置、预览、标签、缩略图和 Tile；缺真实样本 |
+| TRON | Go Runtime SDK | `SDK_PRESENT` / `SDK_REQUIRED` | Linux 符号探测已完成；缺头文件/ABI 和真实样本 |
 
 代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
 
