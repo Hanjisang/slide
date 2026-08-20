@@ -1,20 +1,22 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataAnalysis, DataBoard, DocumentChecked, Files, FirstAidKit, Fold, Menu as MenuIcon, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, DataAnalysis, DataBoard, DocumentChecked, Files, FirstAidKit, Fold, FolderOpened, Menu as MenuIcon, Promotion, Setting, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 
 const route = useRoute(); const router = useRouter(); const auth = useAuthStore(); const collapsed = ref(false); const mobile = ref(false)
 const navCollapsed = computed(() => collapsed.value || mobile.value)
-const menus = [
+const menuGroups = [
   { path: '/dashboard', label: '首页', icon: DataBoard },
-  { path: '/data-sources', label: '数据源管理', icon: DataAnalysis },
-  { path: '/medical-data', label: '医疗数据', icon: FirstAidKit },
-  { path: '/quality', label: '数据质量', icon: DocumentChecked },
-  { path: '/slides', label: '数字切片', icon: Files },
-  { path: '/reports', label: '数据上报', icon: DataBoard },
-  { path: '/system', label: '系统管理', icon: Setting },
+  { label: '数据采集', icon: DataAnalysis, permissions: ['DATA_VIEW','DATA_EDIT'], children: [{ path: '/data-sources', label: '数据源与采集' }] },
+  { path: '/medical-data', label: '医疗数据', icon: FirstAidKit, permissions: ['DATA_VIEW'] },
+  { label: '数据质量', icon: DocumentChecked, permissions: ['QUALITY_MANAGE'], children: [{ path: '/quality', label: '规则与异常' }] },
+  { label: '数字切片', icon: Files, permissions: ['SLIDE_VIEW'], children: [{ path: '/slides', label: '切片管理与归档' }] },
+  { label: '文件管理', icon: FolderOpened, permissions: ['FILE_MANAGE'], children: [{ path: '/files', label: '文件、版本与备份' }] },
+  { label: '数据上报', icon: Promotion, permissions: ['REPORT_GENERATE','DATA_VIEW'], children: [{ path: '/reports', label: '病例、批次与计划' }] },
+  { label: '系统管理', icon: Setting, permissions: ['USER_MANAGE','SYSTEM_CONFIG','MONITOR_VIEW','LOG_VIEW','DICT_MANAGE'], children: [{ path: '/system', label: '配置、监控与告警', icon: Bell }] },
 ]
+const menus = computed(() => menuGroups.filter((item) => auth.hasAny(item.permissions)))
 const title = computed(() => String(route.meta.title || ''))
 async function logout() { await auth.logout(); router.push('/login') }
 function syncViewport() { mobile.value = window.innerWidth <= 900 }
@@ -30,9 +32,15 @@ onBeforeUnmount(() => window.removeEventListener('resize', syncViewport))
         <div v-show="!navCollapsed" class="brand-copy"><strong>MedPath</strong><small>医疗数据上报平台</small></div>
       </div>
       <el-menu :default-active="route.path" router class="side-menu" :collapse="navCollapsed">
-        <el-menu-item v-for="item in menus" :key="item.path" :index="item.path">
+        <template v-for="item in menus" :key="item.path || item.label">
+        <el-sub-menu v-if="item.children" :index="item.label">
+          <template #title><el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span></template>
+          <el-menu-item v-for="child in item.children" :key="child.path" :index="child.path">{{ child.label }}</el-menu-item>
+        </el-sub-menu>
+        <el-menu-item v-else :index="item.path">
           <el-icon><component :is="item.icon" /></el-icon><template #title>{{ item.label }}</template>
         </el-menu-item>
+        </template>
       </el-menu>
       <button class="collapse-button" type="button" @click="collapsed = !collapsed" :title="navCollapsed ? '展开导航' : '收起导航'">
         <el-icon><MenuIcon v-if="navCollapsed" /><Fold v-else /></el-icon><span v-if="!navCollapsed">收起导航</span>

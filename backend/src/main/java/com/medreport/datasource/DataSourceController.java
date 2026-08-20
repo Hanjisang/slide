@@ -1,5 +1,6 @@
 package com.medreport.datasource;
 
+import com.medreport.auth.RequirePermission;
 import com.medreport.common.ApiResponse;
 import com.medreport.common.BizException;
 import com.medreport.security.SecretCipher;
@@ -27,6 +28,7 @@ public class DataSourceController {
     }
 
     @GetMapping
+    @RequirePermission("DATA_VIEW")
     public ApiResponse<List<Map<String, Object>>> list() {
         return ApiResponse.ok(jdbc.queryForList("""
                 SELECT id,name,code,connector_type,system_type,database_type,host,port,database_name,username,jdbc_url,api_url,file_path,enabled,created_at,updated_at
@@ -35,6 +37,7 @@ public class DataSourceController {
     }
 
     @PostMapping
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Map<String, Object>> create(@RequestBody Map<String, Object> body, HttpServletRequest request) {
         require(body, "name", "code", "connectorType", "systemType");
         jdbc.update("""
@@ -49,6 +52,7 @@ public class DataSourceController {
     }
 
     @PutMapping("/{id}")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Void> update(@PathVariable long id, @RequestBody Map<String, Object> body, HttpServletRequest request) {
         require(body, "name", "code", "connectorType", "systemType");
         String password = string(body.get("password"));
@@ -64,12 +68,14 @@ public class DataSourceController {
     }
 
     @PutMapping("/{id}/status")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Void> status(@PathVariable long id, @RequestBody Map<String, Object> body) {
         jdbc.update("UPDATE data_source_config SET enabled=? WHERE id=?", bool(body.get("enabled")), id);
         return ApiResponse.ok();
     }
 
     @PostMapping("/{id}/test")
+    @RequirePermission("DATA_EDIT")
     public ApiResponse<Map<String, Object>> test(@PathVariable long id) {
         Map<String, Object> source = find(id);
         if (!"DATABASE".equals(source.get("connector_type"))) {
@@ -97,4 +103,3 @@ public class DataSourceController {
     private String string(Object value) { return value == null ? null : String.valueOf(value); }
     private boolean bool(Object value) { return value instanceof Boolean b ? b : value instanceof Number n ? n.intValue() != 0 : Boolean.parseBoolean(String.valueOf(value)); }
 }
-

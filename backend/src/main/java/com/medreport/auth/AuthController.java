@@ -20,11 +20,13 @@ public class AuthController {
 
     private final JdbcTemplate jdbc;
     private final TokenService tokenService;
+    private final PermissionService permissionService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public AuthController(JdbcTemplate jdbc, TokenService tokenService) {
+    public AuthController(JdbcTemplate jdbc, TokenService tokenService, PermissionService permissionService) {
         this.jdbc = jdbc;
         this.tokenService = tokenService;
+        this.permissionService = permissionService;
     }
 
     @PostMapping("/login")
@@ -39,7 +41,8 @@ public class AuthController {
         String token = tokenService.issue(id, request.username(), String.valueOf(user.get("role")));
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("token", token);
-        data.put("user", Map.of("id", id, "username", request.username(), "displayName", user.get("display_name"), "role", user.get("role")));
+        data.put("user", Map.of("id", id, "username", request.username(), "displayName", user.get("display_name"), "role", user.get("role"),
+                "permissions", permissionService.permissions(String.valueOf(user.get("role")))));
         return ApiResponse.ok(data);
     }
 
@@ -48,9 +51,15 @@ public class AuthController {
         return ApiResponse.ok((TokenService.Session) request.getAttribute(AuthInterceptor.SESSION_ATTRIBUTE));
     }
 
+    @GetMapping("/permissions")
+    public ApiResponse<java.util.List<String>> permissions(HttpServletRequest request) {
+        TokenService.Session session=(TokenService.Session)request.getAttribute(AuthInterceptor.SESSION_ATTRIBUTE);
+        return ApiResponse.ok(permissionService.permissions(session.role()));
+    }
+
     @PostMapping("/logout")
-    public ApiResponse<Void> logout(@RequestHeader("Authorization") String authorization) {
-        tokenService.revoke(authorization.substring(7));
+    public ApiResponse<Void> logout(@RequestHeader(value="Authorization",required=false) String authorization) {
+        if(authorization!=null&&authorization.startsWith("Bearer "))tokenService.revoke(authorization.substring(7));
         return ApiResponse.ok();
     }
 

@@ -5,7 +5,7 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --retries 5 --timeout 120 -r requirements.txt
 COPY app app
 RUN mkdir -p /data/slides
 EXPOSE 8000

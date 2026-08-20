@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from minio import Minio
 from pydantic import BaseModel
 
-from .adapters import ADAPTERS, detect_format, find_adapter
+from .adapters import ADAPTERS, GO_PARSER, detect_format, find_adapter
 
 app = FastAPI(title="Medical Slide Worker", version="0.1.0")
 
@@ -47,15 +47,12 @@ def require_local(slide_id: int) -> Path:
 
 @app.get("/health")
 def health():
-    return {"status": "UP", "adapterCount": len(ADAPTERS)}
+    return {"status": "UP", "adapterCount": len(ADAPTERS), "goParser": GO_PARSER.health()}
 
 
 @app.get("/api/adapters")
 def adapters():
-    return [
-        {"adapterType": adapter.name, "sdkStatus": adapter.sdk_status, "extensions": sorted(adapter.extensions)}
-        for adapter in ADAPTERS
-    ]
+    return [adapter.capability() for adapter in ADAPTERS]
 
 
 @app.post("/api/slides/{slide_id}/analyze")
@@ -65,10 +62,12 @@ def analyze(slide_id: int, request: AnalyzeRequest):
     adapter = find_adapter(str(path))
     if adapter is None:
         return {"status": "UNSUPPORTED_FORMAT", "format": detect_format(str(path)), "sdkStatus": "SDK_REQUIRED"}
-    if adapter.sdk_status != "AVAILABLE":
+    if not adapter.is_operational():
         return {"status": "SDK_NOT_AVAILABLE", "format": detect_format(str(path)), "adapterType": adapter.name, "sdkStatus": adapter.sdk_status}
     try:
         metadata = adapter.get_metadata(str(path))
+        if metadata.get("status") != "READY":
+            return metadata
         return {"status": "READY", "format": detect_format(str(path)), **metadata}
     except Exception as exc:
         return {"status": "FAILED", "format": detect_format(str(path)), "adapterType": adapter.name, "sdkStatus": adapter.sdk_status, "error": str(exc)}
@@ -78,7 +77,7 @@ def analyze(slide_id: int, request: AnalyzeRequest):
 def tile(slide_id: int, level: int, x: int, y: int, tile_size: int = 256):
     path = require_local(slide_id)
     adapter = find_adapter(str(path))
-    if adapter is None or adapter.sdk_status != "AVAILABLE":
+    if adapter is None or not adapter.is_operational():
         raise HTTPException(status_code=422, detail="SDK_NOT_AVAILABLE")
     try:
         image = adapter.get_tile(str(path), level, x, y, tile_size)
@@ -93,10 +92,9 @@ def tile(slide_id: int, level: int, x: int, y: int, tile_size: int = 256):
 def thumbnail(slide_id: int):
     path = require_local(slide_id)
     adapter = find_adapter(str(path))
-    if adapter is None or adapter.sdk_status != "AVAILABLE":
+    if adapter is None or not adapter.is_operational():
         raise HTTPException(status_code=422, detail="SDK_NOT_AVAILABLE")
     image = adapter.get_thumbnail(str(path))
     output = io.BytesIO()
     image.save(output, format="JPEG", quality=88)
     return Response(output.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
-

@@ -1,41 +1,66 @@
 # 实施进度
 
-更新时间：2026-08-17
+更新时间：2026-08-18
 
-## 已完成
+## v0.3.0 多格式解析已完成工程化
 
-- P0：backend、frontend、slide-worker、MySQL、MinIO、Nginx 与 Docker Compose 已实际构建启动。
-- P1：登录、七个一级菜单、统一响应、统一异常、敏感配置加密、用户与系统配置。
-- P2：患者、就诊、诊断、检验、检查、手术、用药标准表与 CRUD API/页面。
-- P3：Mock HIS/LIS/EMR schema、MySQL 数据源、连接测试、`last_sync_time` 增量采集、日志和调度。
-- P4：字段 Mapping、10 种转换类型、性别字典、`source_system + source_id` 去重。
-- P5：8 种校验规则、自动异常、人工修改、处理日志、重新校验、忽略闭环。
-- P6：MinIO 原始桶/缓存桶、格式识别、Adapter、SVS OpenSlide 真解析、元数据、统一 Tile、OpenSeadragon 阅片和归档。
-- P7：JSON/XML/CSV/ZIP Exporter、HTTP/File Sender、批次/明细、Mock 接收、失败退避重试和人工重报。
-- P8：首页统计、MySQL/MinIO/Slide Worker 健康、存储与业务队列监控。
-- P9：已实测采集 2 条、字典 `1 -> M`、235 岁异常、修正 35 后通过、HTTP 成功/500/自动重试、真实 SVS Tile 与浏览器页面。
+- 当前分支：`feature/v0.3-multiformat-parser`，基于完整 v0.2 提交 `982cd63`，未合并 `main`。
+- P23：独立 `go-parser` module、FileStreamer、最小 types/utils、Registry、HTTP API、ParserCache 和 Docker 构建完成。
+- P24：Python `GoParserAdapter`、动态能力发现、30/15 秒调用超时与 Go Down 降级完成；SVS 继续由 OpenSlide 处理。
+- P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；DMETRIX/FENLAN 已完成真实样本兼容性专项并升级为 `AVAILABLE`。
+- P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
+- P34：确认真实 SDPC Tile 为标准 HEVC Annex-B；接入受控 FFmpeg 解码器，完成真实样本多层级、多坐标、边缘 Tile、性能和并发验证，状态升级为 `AVAILABLE`。
+- P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
+- P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。
 
-## 最终验收
+## v0.2.0 基线已完成
 
-- `mvn -q test`：通过，包含 JSON/XML/CSV/ZIP 导出文件结构校验。
-- `npm run build`：通过，仅有非阻断的首屏依赖包体积提示。
-- Docker Compose 六个服务均已启动，backend、MySQL、MinIO、slide-worker 健康检查通过。
-- XML、CSV、ZIP 批次已通过 API 实际生成并使用 File Sender 发送到 `/data/reports/outbox`。
-- 桌面端、390 x 844 移动端和 OpenSeadragon 真实 SVS 阅片已完成浏览器验收。
+- 当前分支：`feature/v0.2-upgrade`，未合并 `main`。
+- P10-P13：SlideStorageService 拆分、多存储目标、切片管理、真实归档与上传时间策略完成。
+- P14-P16：文件资产/版本、批量操作、备份、四角色轻量授权和后端 403 校验完成。
+- P17-P19：UNIQUE/CROSS_FIELD/CROSS_RECORD、基础数据 CSV/XLSX、真实系统指标和告警闭环完成。
+- P20：病理病例选择、实际 SVS ZIP、模板、手工/定时计划、文件中心登记和 1/5/30 分钟重试完成。
+- P21：SVS 真实解析为 AVAILABLE；该能力在 v0.3 继续保留。
+- P22：Maven、前端、Docker、API、对象存储和浏览器验收完成。
 
-## 未完成 / 外部依赖
+## v0.3 实际测试
 
-- KFB、SDPC、TRON、MDSX、TMAP、DMETRIX、FENLAN、ZYP、HWP、CSP：`ADAPTER_READY`，`SDK_REQUIRED`。
-- SQL Server、Oracle、PostgreSQL、达梦需在实际环境提供并安装对应 JDBC 驱动后做连接验收。
+- `go test ./...`：通过；覆盖 11 个顶层测试，包括 Streamer 越界、截断厂家文件、Registry 状态、HTTP、256 JPEG 和 SDPC 分配边界。
+- `pytest`：4 passed；验证 Go 能力降级短缓存、固定缓存路径和 SVS 优先 OpenSlide。
+- `mvn -q test`：7 个测试类通过；`npm run build` 通过，仅有非阻断 bundle size warning。
+- Go Docker 镜像在 `CGO_ENABLED=0` 下通过测试与构建。
+- Docker Compose：MySQL、MinIO、go-parser、slide-worker、backend、frontend、nginx 七服务运行。
+- Go health：`UP`、7 个已注册 Parser、`cgo=false`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
+- 真实 SVS：`CMU-1-Small-Region.svs`，1,938,955 bytes，2220 x 2967；metadata、thumbnail、两个 Tile 和 OpenSeadragon 通过。
+- Go Down：Worker 保持 `UP`，SVS metadata/Tile 继续成功；Go 格式能力降级为 `PARSER_UNAVAILABLE`。
+- 浏览器：11 格式能力矩阵和 Go Parser 监控正常；桌面与 390 x 844 无页面级横向溢出。
 
-## 当前问题
+## v0.2 基线测试
 
-- 无阻断 MVP 演示的问题。
-- 首屏依赖包体积仍可继续拆分，但不影响运行。
-- 应用内存 Token 不适合多实例生产部署。
+- `mvn -q test`：7 个测试类通过，覆盖归档复制/MD5、备份、逻辑删除、权限 403、病理 ZIP 和 CSV BOM 往返。
+- `npm run build`：通过；仅有非阻断的 bundle size warning。
+- `docker compose up -d --build`：MySQL、MinIO、slide-worker、backend、frontend、nginx 六服务运行；健康检查通过。
+- 真实 SVS：1,938,955 bytes，OpenSlide 返回 `2220 x 2967`、`AVAILABLE`、真实 thumbnail/tile；下载 MD5 为 `1ad6e35c9d17e4d85fb7e3143b328efe`。
+- 真实归档：HOT 到 `pathology-archive`，源/目标大小和 MD5 一致，任务 100%，源对象保留。
+- 文件版本/备份：V1/V2 对象同时存在；BACKUP 对象实际存在且 MD5 一致。
+- 权限：VIEWER 查看切片 200，删除/归档/用户管理均 403；OPERATOR 上传、归档、上报通过。
+- 校验：重复病理号返回业务异常；入院时间晚于出院时间生成 CROSS_FIELD 异常，并完成修正闭环。
+- 病理包：ZIP 实际打开，含 manifest、患者/就诊/诊断/病理 JSON 与 2 张真实 SVS；生成物进入文件中心。
+- HTTP：500 后生成告警，调度器实际重试并从 1 分钟推进到 5 分钟；恢复 200 后人工上报成功。
+- 基础数据/监控：CSV 与 XLSX 往返 0 错误；CPU、内存、磁盘、JVM、存储目标和五类任务均为运行时数据。
+- 浏览器：桌面与 390 x 844 视口通过，无横向溢出；八域菜单及四个核心聚合页正常。
 
-## 下一阶段
+## 外部依赖
 
-- 获取真实厂商 SDK 后在 worker 内实现对应 Adapter。
-- 根据目标上报规范配置正式模板和接收端。
-- 补充生产反向代理 TLS、备份、缓存淘汰与更细粒度审计策略。
+- KFB、TMAP、MDSX、DMETRIX、FENLAN、ZYP 已不依赖厂家 SDK，但缺真实文件 L3-L5 验收，状态为 `TEST_DATA_REQUIRED`。
+- SDPC 使用标准 FFmpeg 解码 HEVC Annex-B，真实样本已通过 HTTP 验证，状态为 `AVAILABLE`；浏览器链路未自动化验证。
+- CSP 原输入带 SDK，但未提供再分发许可，公开构建不包含二进制；HWP/TRON 分别缺 `libhwp_sdk.so`、`libtronc.so`。
+- 正式卫健委接口协议、签名方式、证书和接收地址未提供；当前以可配置模板、HTTP/File Sender 和 Mock HTTP 端点验收。
+- SQL Server、Oracle、PostgreSQL、达梦连接验收需要目标环境与 JDBC 驱动。
+
+## 已知限制
+
+- Token 为单实例内存会话，服务重启后需重新登录。
+- S3 兼容接口不能可靠获取后端总容量时明确显示 `UNKNOWN`。
+- 首屏依赖包仍有体积提示，不影响功能和运行。
+- 厂家格式未完成真实 metadata/thumbnail/多 Tile/浏览器验收前，不得标为 `AVAILABLE`。

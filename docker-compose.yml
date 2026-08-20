@@ -38,6 +38,19 @@ services:
       timeout: 3s
       retries: 30
 
+  go-parser:
+    build: ./go-parser
+    environment:
+      SLIDE_CACHE_DIR: /data/slides
+      TZ: Asia/Shanghai
+    volumes:
+      - slide_cache:/data/slides:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
   slide-worker:
     build: ./slide-worker
     environment:
@@ -45,6 +58,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       SLIDE_CACHE_DIR: /data/slides
+      GO_PARSER_URL: http://go-parser:8100
     ports:
       - "8000:8000"
     volumes:
