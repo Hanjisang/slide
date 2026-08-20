@@ -29,6 +29,7 @@ type Sdpc struct {
 	FileSize                 int64
 	ExtraInfo                SqExtraInfo
 	ColorCorrector           *ColorCorrector
+	Decoder                  Decoder
 }
 
 // 7*4+8 = 36

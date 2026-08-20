@@ -12,7 +12,7 @@ func TestCapabilitiesDoNotClaimAvailabilityWithoutRealSlides(t *testing.T) {
 		t.Fatalf("expected 10 Go/vendor formats, got %d", len(formats))
 	}
 	for _, format := range formats {
-		if format.Status == "AVAILABLE" && format.Format != "DMETRIX" && format.Format != "FENLAN" {
+		if format.Status == "AVAILABLE" && format.Format != "DMETRIX" && format.Format != "FENLAN" && format.Format != "SDPC" {
 			t.Fatalf("%s must not be AVAILABLE without L5 evidence", format.Format)
 		}
 	}

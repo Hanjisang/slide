@@ -3,10 +3,11 @@ package sdpc
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 	"image"
 	"image/jpeg"
+	"image/png"
 	"imageparser/types"
 	"imageparser/utils"
 	"imageparser/utils/streamer"
@@ -24,7 +25,7 @@ const (
 )
 
 func New(fs streamer.Streamer) (*Sdpc, error) {
-	sd := &Sdpc{Streamer: fs}
+	sd := &Sdpc{Streamer: fs, Decoder: NewFFmpegDecoder()}
 	if sd.GetType() == "file" {
 		var err error
 		sd.FileSize, err = utils.GetFileSizeBigger1M(sd.GetFileName()) //文件至少大于1M
@@ -245,7 +246,6 @@ func (sd *Sdpc) GetRaw(idx, x, y int) ([]byte, bool, error) {
 	bs := make([]byte, info.Size)
 	err := sd.Range2Type(info.Pos, int64(info.Size), bs)
 	if err != nil {
-		fmt.Printf("GetRaw err: %v\n", err)
 		return nil, isDefaultSlice, err
 	}
 	return bs, isDefaultSlice, nil
@@ -262,7 +262,11 @@ func (sd *Sdpc) GetRGBA(idx, x, y int) (image.Image, error) {
 		return sd.ColorCorrector.Apply(sd.DefaultSlice)
 	} else {
 		var decoded image.Image
-		switch sd.SliceFormat {
+		codec := sd.SliceFormat
+		if idx >= 0 && idx < len(sd.FileLayerInfo) && sd.FileLayerInfo[idx].Format != 0 {
+			codec = uint32(sd.FileLayerInfo[idx].Format)
+		}
+		switch codec {
 		case 0:
 			decoded, err = jpeg.Decode(bytes.NewReader(bs))
 			if err != nil {
@@ -273,10 +277,23 @@ func (sd *Sdpc) GetRGBA(idx, x, y int) (image.Image, error) {
 			if err != nil {
 				return nil, err
 			}
+		case 2:
+			decoded, err = png.Decode(bytes.NewReader(bs))
+			if err != nil {
+				return nil, err
+			}
+		case 3:
+			decoded, err = tiff.Decode(bytes.NewReader(bs))
+			if err != nil {
+				return nil, err
+			}
 		case 4:
-			return nil, ErrDecoderRequired
+			if sd.Decoder == nil {
+				return nil, ErrDecoderRequired
+			}
+			decoded, err = sd.Decoder.Decode(bs, sd.SliceWidth, sd.SliceHeight)
 		default:
-			return nil, errors.New("only support jpeg bmp hevc")
+			return nil, errors.New("UNSUPPORTED_CODEC")
 		}
 		if decoded.Bounds().Dx() != sd.SliceWidth || decoded.Bounds().Dy() != sd.SliceHeight {
 			return nil, errors.New("SDPC decoded tile dimensions do not match header")

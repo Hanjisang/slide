@@ -9,6 +9,7 @@
 - P24：Python `GoParserAdapter`、动态能力发现、30/15 秒调用超时与 Go Down 降级完成；SVS 继续由 OpenSlide 处理。
 - P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；DMETRIX/FENLAN 已完成真实样本兼容性专项并升级为 `AVAILABLE`。
 - P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
+- P34：确认真实 SDPC Tile 为标准 HEVC Annex-B；接入受控 FFmpeg 解码器，完成真实样本多层级、多坐标、边缘 Tile、性能和并发验证，状态升级为 `AVAILABLE`。
 - P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
 - P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。
 
@@ -52,7 +53,7 @@
 ## 外部依赖
 
 - KFB、TMAP、MDSX、DMETRIX、FENLAN、ZYP 已不依赖厂家 SDK，但缺真实文件 L3-L5 验收，状态为 `TEST_DATA_REQUIRED`。
-- SDPC 缺真实文件；HEVC 路径缺 `libDecodeHevc.so`，状态为 `DECODER_REQUIRED`。
+- SDPC 使用标准 FFmpeg 解码 HEVC Annex-B，真实样本已通过 HTTP 验证，状态为 `AVAILABLE`；浏览器链路未自动化验证。
 - CSP 原输入带 SDK，但未提供再分发许可，公开构建不包含二进制；HWP/TRON 分别缺 `libhwp_sdk.so`、`libtronc.so`。
 - 正式卫健委接口协议、签名方式、证书和接收地址未提供；当前以可配置模板、HTTP/File Sender 和 Mock HTTP 端点验收。
 - SQL Server、Oracle、PostgreSQL、达梦连接验收需要目标环境与 JDBC 驱动。

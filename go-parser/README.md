@@ -8,7 +8,7 @@
 |---|---|---|---|
 | KFB / TMAP / MDSX / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和做损坏输入测试，缺真实厂商文件 L3-L5 验收 |
 | DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
-| SDPC | Go Native | `DECODER_REQUIRED` | 结构和 JPEG/BMP 路径可构建；HEVC 缺 `libDecodeHevc.so` |
+| SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建不包含 |
 | HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺运行所需 Linux SDK |
 
@@ -51,7 +51,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。当前 Dockerfile 不会自动链接其中内容。接入 CSP/HWP/TRON 或 SDPC HEVC 时，必须同时提供：合法授权、Linux amd64 库、受控 build tag/adapter、缺库时仍可构建的隔离路径，以及真实文件 L3-L5 验收。不得直接提交 `.so`、`.dll` 或厂家头文件。
+`vendor-libs/` 已被 Git 忽略，仅用于取得明确授权后的本机实验。SDPC HEVC 默认使用 Alpine 仓库中的 FFmpeg 标准解码器，不链接厂商 `.so`；CSP/HWP/TRON 仍需合法授权、Linux amd64 库、受控 build tag/adapter。不得直接提交 `.so`、`.dll` 或厂家头文件。
 
 ## 测试数据
 

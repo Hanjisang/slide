@@ -60,7 +60,7 @@ func New() *Registry {
 		{Capability: availableNative("DMETRIX", ".dmetrix"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return dmetrix.New(s) }},
 		{Capability: availableNative("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
 		{Capability: native("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
-		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusDecoderRequired, Extensions: []string{".sdpc"}, Build: true, Missing: "libDecodeHevc.so for HEVC slides", SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
+		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
 		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusSDKBundled, Extensions: []string{".csp"}, Build: false, Missing: "authorized libcsp_sdk.so in vendor-libs", SourceIncluded: false}},
 		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".hwp"}, Build: false, Missing: "libhwp_sdk.so", SourceIncluded: false}},
 		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".tron"}, Build: false, Missing: "libtronc.so", SourceIncluded: false}},
