@@ -57,8 +57,8 @@ func New() *Registry {
 		{Capability: native("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
 		{Capability: native("TMAP", ".tmap"), newParser: tmap.New},
 		{Capability: native("MDSX", ".mdsx"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return mdsx.New(s) }},
-		{Capability: native("DMETRIX", ".dmetrix"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return dmetrix.New(s) }},
-		{Capability: native("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
+		{Capability: availableNative("DMETRIX", ".dmetrix"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return dmetrix.New(s) }},
+		{Capability: availableNative("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
 		{Capability: native("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
 		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusDecoderRequired, Extensions: []string{".sdpc"}, Build: true, Missing: "libDecodeHevc.so for HEVC slides", SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
 		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusSDKBundled, Extensions: []string{".csp"}, Build: false, Missing: "authorized libcsp_sdk.so in vendor-libs", SourceIncluded: false}},
@@ -78,6 +78,10 @@ func New() *Registry {
 
 func native(format, extension string) Capability {
 	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "real vendor slide for L3-L5 validation", SourceIncluded: true}
+}
+
+func availableNative(format, extension string) Capability {
+	return Capability{Format: format, Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
 }
 
 func (r *Registry) Formats() []Capability {

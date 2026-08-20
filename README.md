@@ -99,7 +99,8 @@ docker compose down
 | 格式 | Engine | 状态 | 说明 |
 |---|---|---|---|
 | SVS | OpenSlide | `AVAILABLE` | 真实 metadata、thumbnail、Tile 和浏览器验收 |
-| KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
+| KFB / TMAP / MDSX / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
+| DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
 | SDPC | Go Native | `DECODER_REQUIRED` | JPEG/BMP 路径可构建；HEVC 缺 decoder，且缺真实样本 |
 | CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
 | HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺 Linux SDK 与真实样本 |

@@ -26,8 +26,30 @@ type fenlanInfo struct {
 	CeilLength      uint16
 	ImageType       int16
 	ScanScale       float32
-	ImgIdx          [2]types.ImgIndex
-	//Layeridx       [3]LayerId
+	ImgIdx          [2]fenlanImgIndexDisk
+}
+
+type layerIndexDisk struct {
+	Layer    uint16
+	MaxLine  uint32
+	MaxRow   uint32
+	DataPos  uint32
+}
+
+type fenlanImgIndexDisk struct {
+	Layer uint16
+	Line  uint32
+	Row   uint32
+	Pos   int64
+	Size  uint32
+}
+
+type fenlanIndexDisk struct {
+	Layer uint16
+	Line  uint32
+	Row   uint32
+	Pos   int64
+	Size  uint32
 }
 
 type fenlan struct {
@@ -54,13 +76,13 @@ func New(fs streamer.Streamer) (*fenlan, error) {
 	if err != nil {
 		return nil, err
 	}
-	if f.Info.MinLayer < 0 || f.Info.MinLayer >= 20 || f.Info.Width <= 0 || f.Info.Height <= 0 || f.Info.SinglePixelSize <= 0 {
+	if f.Info.MinLayer >= 20 || f.Info.Width == 0 || f.Info.Height == 0 || f.Info.SinglePixelSize <= 0 {
 		return nil, fmt.Errorf("invalid FENLAN header")
 	}
 
 	//maxLayer := int(f.Info.MinLayer)+1
 
-	index := make([]types.LayerIndex, f.Info.MinLayer+1)
+	index := make([]layerIndexDisk, f.Info.MinLayer+1)
 	//读取具体的index
 	size := 14 * (int64(f.Info.MinLayer) + 1)
 	err = f.Range2Type(100, size, index)
@@ -71,20 +93,26 @@ func New(fs streamer.Streamer) (*fenlan, error) {
 
 	f.Total = 0
 	for layer, idx := range index {
-		idx.LayerStartPos = int32(f.Total)
-		f.LayerIdx[int(f.Info.MinLayer)-layer] = idx
-		f.Total += int(idx.MaxLine * idx.MaxRow)
-		if f.Total < 0 || f.Total > 2_000_000 {
+		f.LayerIdx[int(f.Info.MinLayer)-layer] = types.LayerIndex{Layer: idx.Layer, LayerStartPos: int32(f.Total), MaxLine: idx.MaxLine, MaxRow: idx.MaxRow}
+		count, ok := checkedTileCount(idx.MaxLine, idx.MaxRow)
+		if !ok || count > 2_000_000-f.Total {
 			return nil, fmt.Errorf("FENLAN tile index count exceeds safety limit")
 		}
+		f.Total += count
 	}
 	//fmt.Println("f.LayerId = ", f.LayerId)
 
-	f.ImgIdx = make([]types.ImgIndex, f.Total)
-	err = f.Range2Type(100+size, 22*int64(f.Total), f.ImgIdx)
+	rawIndexes := make([]fenlanIndexDisk, f.Total)
+	indexBytes, ok := checkedByteCount(f.Total, 22)
+	if !ok {
+		return nil, fmt.Errorf("FENLAN INVALID_TILE_INDEX: index byte count overflow")
+	}
+	err = f.Range2Type(100+size, indexBytes, rawIndexes)
 	if err != nil {
 		return nil, err
 	}
+	f.ImgIdx = make([]types.ImgIndex, len(rawIndexes))
+	for i, raw := range rawIndexes { f.ImgIdx[i] = types.ImgIndex{Layer: raw.Layer, Line: raw.Line, Row: raw.Row, Pos: raw.Pos, Size: raw.Size} }
 
 	f.Head = types.NewHeaderInfo(f.GetFileName(), 0, int(f.Info.MinLayer), int(f.Info.Height), int(f.Info.Width), f.Info.ScanScale, 10/f.Info.SinglePixelSize, 0, 0, f.Info.SinglePixelSize, 256)
 
@@ -146,8 +174,26 @@ func (f *fenlan) GetImage(layer, line, row int, w io.Writer) error {
 	}
 	//
 	//pos := int64(p.Info.Hsize) + ImgIdx.Pos
+	if imgIdx.Pos < 0 || imgIdx.Size == 0 {
+		return fmt.Errorf("FENLAN INVALID_TILE_INDEX: invalid tile offset or length")
+	}
 	return f.Range2Writer(imgIdx.Pos, int64(imgIdx.Size), w)
 	//return nil, nil
+}
+
+func checkedTileCount(maxLine, maxRow uint32) (int, bool) {
+	cols, rows := uint64(maxLine), uint64(maxRow)
+	if cols == 0 || rows == 0 || cols > uint64(2_000_000)/rows {
+		return 0, false
+	}
+	return int(cols * rows), true
+}
+
+func checkedByteCount(count, entrySize int) (int64, bool) {
+	if count < 0 || entrySize < 0 || uint64(count) > uint64(^uint64(0))/uint64(entrySize) {
+		return 0, false
+	}
+	return int64(count * entrySize), true
 }
 
 func (f *fenlan) GetDependencies() ([]string, error) {

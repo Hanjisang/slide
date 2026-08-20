@@ -7,7 +7,7 @@
 - 当前分支：`feature/v0.3-multiformat-parser`，基于完整 v0.2 提交 `982cd63`，未合并 `main`。
 - P23：独立 `go-parser` module、FileStreamer、最小 types/utils、Registry、HTTP API、ParserCache 和 Docker 构建完成。
 - P24：Python `GoParserAdapter`、动态能力发现、30/15 秒调用超时与 Go Down 降级完成；SVS 继续由 OpenSlide 处理。
-- P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；因无真实厂商文件，状态严格保留 `TEST_DATA_REQUIRED`。
+- P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；DMETRIX/FENLAN 已完成真实样本兼容性专项并升级为 `AVAILABLE`。
 - P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
 - P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
 - P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。

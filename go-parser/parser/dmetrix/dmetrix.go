@@ -29,7 +29,22 @@ type dmetrixInfo struct {
 	XLength     float64
 	YLength     float64
 	Multiple    int32
-	Layeridx    [20]types.LayerIndex
+	Layeridx    [20]dmetrixLayerIndexDisk
+}
+
+type dmetrixLayerIndexDisk struct {
+	Layer         uint16
+	MaxLine       uint32
+	MaxRow        uint32
+	LayerStartPos uint32
+}
+
+type dmetrixImgIndexDisk struct {
+	Layer uint16
+	Line  uint32
+	Row   uint32
+	Pos   int64
+	Size  uint32
 }
 
 type dmetrix struct {
@@ -91,14 +106,16 @@ func New(fs streamer.Streamer) (*dmetrix, error) {
 	var minLayer int
 	dm.Total = 2
 
-	for layer, idx := range dm.Info.Layeridx {
+	for layer, raw := range dm.Info.Layeridx {
+		idx := types.LayerIndex{Layer: raw.Layer, LayerStartPos: int32(raw.LayerStartPos), MaxLine: raw.MaxLine, MaxRow: raw.MaxRow}
 		if idx.LayerStartPos > 0 {
 			idx.LayerStartPos = int32(dm.Total)
 			dm.ImgLayer[layer] = idx
-			dm.Total += int((idx.MaxLine + 1) * (idx.MaxRow + 1))
-			if dm.Total < 0 || dm.Total > 2_000_000 {
+			count, err := checkedTileCount(idx.MaxLine, idx.MaxRow)
+			if err != nil || count > 2_000_000-dm.Total {
 				return nil, fmt.Errorf("DMETRIX tile index count exceeds safety limit")
 			}
+			dm.Total += count
 			if minLayer == 0 {
 				minLayer = layer
 			}
@@ -106,11 +123,17 @@ func New(fs streamer.Streamer) (*dmetrix, error) {
 	}
 
 	//获取到所有的索引 包括标签图 缩略图 和 layer line row 组成的图
-	dm.ImgIdx = make([]types.ImgIndex, dm.Total)
-	err = dm.Range2Type(348, int64(dm.Total)*22, dm.ImgIdx)
+	rawIndexes := make([]dmetrixImgIndexDisk, dm.Total)
+	indexBytes, ok := checkedByteCount(dm.Total, 22)
+	if !ok {
+		return nil, fmt.Errorf("DMETRIX INVALID_TILE_INDEX: index byte count overflow")
+	}
+	err = dm.Range2Type(348, indexBytes, rawIndexes)
 	if err != nil {
 		return nil, err
 	}
+	dm.ImgIdx = make([]types.ImgIndex, len(rawIndexes))
+	for i, raw := range rawIndexes { dm.ImgIdx[i] = types.ImgIndex{Layer: raw.Layer, Line: raw.Line, Row: raw.Row, Pos: raw.Pos, Size: raw.Size} }
 
 	dm.Head = types.NewHeaderInfo(dm.GetFileName(), minLayer, int(dm.Info.MaxLayer-1), int(dm.Info.Height), int(dm.Info.Width), float32(dm.Info.Multiple), float32(10/dm.Info.XLength), 0, 0, float32(dm.Info.XLength), 256)
 
@@ -206,9 +229,25 @@ func (dm *dmetrix) GetImage(layer, line, row int, w io.Writer) error {
 	}*/
 	//fmt.Println(imgIdx, layer, line, row)
 	//
-	pos := int64(dm.Info.Hsize) + imgIdx.Pos
+	if imgIdx.Pos < 0 || imgIdx.Size == 0 {
+		return fmt.Errorf("DMETRIX INVALID_TILE_INDEX: invalid tile offset or length")
+	}
+	return dm.Range2Writer(imgIdx.Pos, int64(imgIdx.Size), w)
+}
 
-	return dm.Range2Writer(pos, int64(imgIdx.Size), w)
+func checkedTileCount(maxLine, maxRow uint32) (int, error) {
+	cols, rows := uint64(maxLine)+1, uint64(maxRow)+1
+	if cols == 0 || rows == 0 || cols > uint64(2_000_000)/rows {
+		return 0, fmt.Errorf("tile count out of range: %d x %d", cols, rows)
+	}
+	return int(cols * rows), nil
+}
+
+func checkedByteCount(count, entrySize int) (int64, bool) {
+	if count < 0 || entrySize < 0 || uint64(count) > uint64(^uint64(0))/uint64(entrySize) {
+		return 0, false
+	}
+	return int64(count * entrySize), true
 }
 
 func isExists(dir string) bool {
