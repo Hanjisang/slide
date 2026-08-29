@@ -30,10 +30,10 @@ Mock/医院 MySQL
 Browser -> /api/slides/{id}/tiles/{level}/{x}/{y}
         -> Spring Boot 统一代理 -> slide-worker
                                   +-> SVS -> OpenSlide
-                                  +-> KFB/TMAP/MDSX/DMETRIX/FENLAN/ZYP/SDPC/CSP -> Go Parser
+                                  +-> KFB/TMAP/MDSX/DMETRIX/FENLAN/ZYP/SDPC/CSP/HWP/TRON -> Go Parser
 ```
 
-Worker 将 MinIO 对象缓存到 `slide_cache:/data/slides/{slideId}`。Go Parser 以只读方式挂载同一 volume，不重复下载对象；HWP/TRON 在缺 SDK 时保留不可操作能力，不影响 SVS 或纯 Go 格式。
+Worker 将 MinIO 对象缓存到 `slide_cache:/data/slides/{slideId}`。Go Parser 以只读方式挂载同一 volume，不重复下载对象；HWP/TRON 从独立只读 SDK volume 动态加载，缺 SDK 时仅对应文件初始化失败，不影响 SVS 或纯 Go 格式。
 
 ## v0.3 Parser 服务
 
@@ -41,7 +41,7 @@ Go Parser 使用 `net/http` 提供 health、formats、analyze、thumbnail、labe
 
 ParserCache 的键包含路径、文件大小和 mtime，TTL 30 分钟，最多 128 项。每个切片条目有独立互斥锁；不同切片可以并发。浏览器层级统一为低分辨率 0 到高分辨率 maxLevel，Tile 统一输出 256 x 256 JPEG，边缘白色补齐。
 
-默认 Go 镜像 `CGO_ENABLED=0`。SDPC 的 HEVC decoder、CSP、HWP 和 TRON 作为可选能力隔离，缺少其中任何一个都不能阻止服务构建或启动。详细边界见 `docs/v0.3-parser-architecture.md`。
+默认 Go 镜像基于 Debian/glibc 并启用 CGO，以兼容 HWP/TRON Linux SDK；SDK 不链接、不复制进镜像，仅在运行时 `dlopen`。CSP 是纯 Go 分段读取实现。缺少任一厂家 SDK 不能阻止服务构建或启动。详细边界见 `docs/v0.3-parser-architecture.md`。
 
 ## v0.2 局部重构
 

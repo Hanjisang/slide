@@ -13,6 +13,12 @@ type ImageParser interface {
 	GetMacrograph(w io.Writer) error
 }
 
+// CloseableParser is implemented by parsers that own native SDK handles.
+// The service cache closes these handles when an entry is replaced or evicted.
+type CloseableParser interface {
+	Close() error
+}
+
 type HeaderInfo struct {
 	FileName     string  `json:"fileName"`
 	MinLayer     int     `json:"minLayer"`

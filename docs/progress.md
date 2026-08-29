@@ -11,8 +11,8 @@
 - 新增 `verify-slide` 统一验证命令，可扫描目录并输出匿名 JSON 证据。
 - 修复 SVS Worker metadata 缺少 `READY` 协议字段、MDSX 坐标轴校验，以及前端混合层级顺序/512 tileSize 处理。
 - KFB/TMAP/MDSX/ZYP 已从 `TEST_DATA_REQUIRED` 升级为 `AVAILABLE`。
-- HWP/TRON 的本地 SDK 是依赖可解析的 Linux amd64 ELF，但 v0.3 没有已验证的 adapter/ABI，状态为 `COMPATIBILITY_REQUIRED`。
-- CSP 有真实样本，但无可确认授权的 SDK 和运行许可，状态为 `LICENSE_REQUIRED`。
+- FINAL 开发收口：CSP 纯 Go 分段读取 parser、HWP/TRON 动态 SDK adapter、缓存原生句柄释放和 glibc 容器集成已完成。
+- CSP/HWP/TRON 只完成开发与基础自动化测试，未执行人工真实切片验收，状态统一为 `TEST_DATA_REQUIRED`。
 
 ## P36 主要结果
 
@@ -26,15 +26,15 @@
 | FENLAN | 1 | 3308×2847 / 2 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | ZYP | 1 | 32768×31232 / 10 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | SDPC | 1 | 83328×91392 / 8 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
-| HWP | 2 | blocked before parser | — | — | — | — | `COMPATIBILITY_REQUIRED` |
-| TRON | 1 | blocked before parser | — | — | — | — | `COMPATIBILITY_REQUIRED` |
-| CSP | 1 | blocked before parser | — | — | — | — | `LICENSE_REQUIRED` |
+| HWP | 2 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
+| TRON | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
+| CSP | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
 
 TMAP/ZYP 的部分抽样 Tile 被图像哨兵标为 `ALL_WHITE`，请求与解码均成功；这是背景内容告警，不计解析失败。SDPC 因每 Tile 启动 FFmpeg 子进程，性能明显低于纯 Go JPEG/BMP 路径，详见统一验收报告。
 
 ## 自动化与构建
 
-- Go：`go test ./...` 通过；Dockerfile 在 `CGO_ENABLED=0` 下执行全包测试并构建 `go-parser`、`verify-slide`。
+- Go：`go test ./...` 通过；Dockerfile 在 Debian/glibc、`CGO_ENABLED=1` 下执行全包测试并构建 `go-parser`、`verify-slide`。
 - Worker：`pytest` 5 passed，包含 OpenSlide `READY` 协议回归。
 - Frontend：TypeScript 检查与 Vite production build 通过；仅保留已有 bundle-size warning。
 - Compose：MySQL、MinIO、Go Parser、Slide Worker、Backend、Frontend、Nginx 七服务已完成 no-cache 构建和健康启动；验收期间宿主机系统盘耗尽导致 Docker Desktop 控制面/MySQL 停止，属于宿主环境事件，不是 parser panic。
@@ -45,7 +45,7 @@ v0.2 的多存储目标、真实归档/备份、文件版本、RBAC、数据质�
 
 ## 后续依赖
 
-- HWP/TRON：需要厂家确认的函数签名、初始化/释放顺序、线程模型、匹配 SDK 版本和许可，再在隔离构建中实现并验收 adapter；不能仅因 `.so` 存在就标为可用。
-- CSP：先取得合法 SDK、运行许可证和再分发边界，再进行 CGO 隔离集成与真实文件验收。
+- HWP/TRON：adapter 已按本地 Linux SDK 导出 ABI 实现；下一步只做人工真实切片的 metadata、附件、层级/坐标和稳定性验收，验收前不能标为 `AVAILABLE`。
+- CSP：纯 Go parser 已基于公开 OpenCsp 格式完成；下一步做人工真实切片验收，验收前不能标为 `AVAILABLE`。
 - SDPC：可优化为常驻解码进程或批处理，降低 FFmpeg 子进程启动开销。
 - 正式卫健委接口、SQL Server/Oracle/PostgreSQL/达梦仍需目标协议、证书、驱动和联调环境。

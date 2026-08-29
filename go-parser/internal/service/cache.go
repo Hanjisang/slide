@@ -66,21 +66,39 @@ func (c *ParserCache) Get(slideID int64) (*cacheEntry, error) {
 	}
 	header, err := parser.GetHeaderInfoFunc()
 	if err != nil {
+		closeImageParser(parser)
 		return nil, err
 	}
 	created := &cacheEntry{key: key, parser: parser, capability: capability, header: header, lastUsed: now}
 
 	c.mu.Lock()
+	if existing := c.entries[slideID]; existing != nil && existing.key == key && now.Sub(existing.lastUsed) <= c.ttl {
+		existing.lastUsed = now
+		c.mu.Unlock()
+		closeImageParser(parser)
+		return existing, nil
+	}
+	replaced := c.entries[slideID]
 	c.entries[slideID] = created
-	c.evict(now)
+	evicted := c.evict(now)
 	c.mu.Unlock()
+	if replaced != nil && replaced != created {
+		closeCacheEntry(replaced)
+	}
+	for _, item := range evicted {
+		if item != replaced && item != created {
+			closeCacheEntry(item)
+		}
+	}
 	return created, nil
 }
 
-func (c *ParserCache) evict(now time.Time) {
+func (c *ParserCache) evict(now time.Time) []*cacheEntry {
+	var evicted []*cacheEntry
 	for id, item := range c.entries {
 		if now.Sub(item.lastUsed) > c.ttl {
 			delete(c.entries, id)
+			evicted = append(evicted, item)
 		}
 	}
 	for len(c.entries) > c.maxItems {
@@ -91,7 +109,24 @@ func (c *ParserCache) evict(now time.Time) {
 				oldestID, oldest = id, item.lastUsed
 			}
 		}
+		evicted = append(evicted, c.entries[oldestID])
 		delete(c.entries, oldestID)
+	}
+	return evicted
+}
+
+func closeCacheEntry(item *cacheEntry) {
+	if item == nil {
+		return
+	}
+	item.mu.Lock()
+	defer item.mu.Unlock()
+	closeImageParser(item.parser)
+}
+
+func closeImageParser(parser types.ImageParser) {
+	if closeable, ok := parser.(types.CloseableParser); ok {
+		_ = closeable.Close()
 	}
 }
 

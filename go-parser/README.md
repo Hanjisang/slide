@@ -1,6 +1,6 @@
 # Go Multi-format Slide Parser
 
-内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认构建为 Linux amd64/CGO disabled，不直接访问 MinIO，也不对公网暴露。
+内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认镜像为 Linux amd64/glibc + CGO，不直接访问 MinIO，也不对公网暴露。HWP/TRON SDK 仅从只读本地 volume 动态加载，缺失时不影响服务启动和其他格式。
 
 ## 支持状态
 
@@ -8,8 +8,8 @@
 |---|---|---|---|
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
-| CSP | Go CGO | `LICENSE_REQUIRED` | 缺可确认授权的 SDK 与运行许可，默认构建不包含 |
-| HWP / TRON | Vendor SDK | `COMPATIBILITY_REQUIRED` | 本地 SDK 是可链接的 Linux amd64 ELF，但 v0.3 没有匹配 adapter/ABI |
+| CSP | Go Native | `TEST_DATA_REQUIRED` | 基于公开 OpenCsp 格式实现分段读取、金字塔/附件索引和安全边界，尚未人工真实切片验收 |
+| HWP / TRON | Vendor SDK Runtime | `TEST_DATA_REQUIRED` | adapter 已实现，SDK 运行时动态加载；尚未人工真实切片验收 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 
@@ -17,11 +17,11 @@ SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析�
 
 ```bash
 go test ./...
-CGO_ENABLED=0 go build -o go-parser ./cmd/server
+CGO_ENABLED=1 go build -o go-parser ./cmd/server
 docker build -t medical-go-parser:0.3.0 .
 ```
 
-Dockerfile 会先执行全包测试，再用非 root 用户启动。服务监听 `:8100`，缓存根目录来自 `SLIDE_CACHE_DIR`，默认 `/data/slides`。
+Dockerfile 会先执行全包测试，再用非 root 用户启动。服务监听 `:8100`，缓存根目录来自 `SLIDE_CACHE_DIR`，默认 `/data/slides`。CSP 不依赖 CGO；启用 CGO 是为了运行时调用 HWP/TRON Linux SDK。
 
 ## API
 
@@ -52,7 +52,10 @@ verify-slide --dir /samples --all --random 20 --performance 10 --concurrency 5,1
 ```bash
 docker run --rm -p 8100:8100 \
   -e SLIDE_CACHE_DIR=/data/slides \
+  -e HWP_SDK_PATH=/opt/vendor-libs/hwp/libhwp_sdk.so \
+  -e TRON_SDK_PATH=/opt/vendor-libs/tron/libtronc.so \
   -v /absolute/slide-cache:/data/slides:ro \
+  -v /absolute/vendor-libs-local:/opt/vendor-libs:ro \
   medical-go-parser:0.3.0
 ```
 
@@ -60,7 +63,7 @@ docker run --rm -p 8100:8100 \
 
 ## 厂家 SDK
 
-`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交，只用于取得明确授权后的本机实验。SDPC HEVC 默认使用 Alpine 仓库中的 FFmpeg 标准解码器，不链接厂商 `.so`；CSP/HWP/TRON 仍需合法授权、匹配 adapter/ABI 和受控构建。不得直接提交 `.so`、`.dll` 或厂家头文件。
+`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交。HWP/TRON adapter 通过 `dlopen` 加载 `HWP_SDK_PATH`、`TRON_SDK_PATH`，镜像和仓库不包含 `.so`、`.dll` 或厂家头文件；SDK 缺失只会让对应文件初始化失败。CSP 为纯 Go，不需要厂家 SDK。OpenCsp 来源与许可见仓库根目录 `THIRD_PARTY_NOTICES.md`。
 
 ## 测试数据
 

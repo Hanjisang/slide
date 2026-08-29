@@ -9,12 +9,15 @@ import (
 	"sort"
 	"strings"
 
+	"imageparser/parser/csp"
 	"imageparser/parser/dmetrix"
 	"imageparser/parser/fenlan"
+	"imageparser/parser/hwp"
 	"imageparser/parser/kfb"
 	"imageparser/parser/mdsx"
 	"imageparser/parser/sdpc"
 	"imageparser/parser/tmap"
+	"imageparser/parser/tron"
 	"imageparser/parser/zyp"
 	"imageparser/types"
 	"imageparser/utils/streamer"
@@ -24,6 +27,7 @@ type Status string
 
 const (
 	StatusAvailable             Status = "AVAILABLE"
+	StatusTestDataRequired      Status = "TEST_DATA_REQUIRED"
 	StatusLicenseRequired       Status = "LICENSE_REQUIRED"
 	StatusCompatibilityRequired Status = "COMPATIBILITY_REQUIRED"
 )
@@ -60,9 +64,9 @@ func New() *Registry {
 		{Capability: availableNative("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
 		{Capability: availableNative("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
 		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
-		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusLicenseRequired, Extensions: []string{".csp"}, Build: false, Missing: "authorized CSP SDK and runtime license", SourceIncluded: false}},
-		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK", Status: StatusCompatibilityRequired, Extensions: []string{".hwp"}, Build: false, Missing: "compatible SDK adapter and verified ABI", SourceIncluded: false}},
-		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK", Status: StatusCompatibilityRequired, Extensions: []string{".tron"}, Build: false, Missing: "compatible SDK adapter and verified ABI", SourceIncluded: false}},
+		{Capability: testDataRequired("CSP", "GO_NATIVE", ".csp"), newParser: csp.New},
+		{Capability: testDataRequired("HWP", "VENDOR_SDK_RUNTIME", ".hwp"), newParser: hwp.New},
+		{Capability: testDataRequired("TRON", "VENDOR_SDK_RUNTIME", ".tron"), newParser: tron.New},
 	}
 	r := &Registry{byExtension: make(map[string]entry, len(entries))}
 	for _, item := range entries {
@@ -77,6 +81,10 @@ func New() *Registry {
 
 func availableNative(format, extension string) Capability {
 	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
+}
+
+func testDataRequired(format, engine, extension string) Capability {
+	return Capability{Format: format, Engine: engine, Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "manual real-slide validation", SourceIncluded: true}
 }
 
 func (r *Registry) Formats() []Capability {
@@ -106,12 +114,20 @@ func (r *Registry) Open(path string) (parser types.ImageParser, capability Capab
 	}
 	header, err := parser.GetHeaderInfoFunc()
 	if err != nil {
+		closeParser(parser)
 		return nil, item.Capability, fmt.Errorf("%s metadata failed: %w", item.Format, err)
 	}
 	if err := validateHeader(header); err != nil {
+		closeParser(parser)
 		return nil, item.Capability, fmt.Errorf("%s invalid metadata: %w", item.Format, err)
 	}
 	return parser, item.Capability, nil
+}
+
+func closeParser(parser types.ImageParser) {
+	if closeable, ok := parser.(types.CloseableParser); ok {
+		_ = closeable.Close()
+	}
 }
 
 func validateHeader(header types.HeaderInfo) error {

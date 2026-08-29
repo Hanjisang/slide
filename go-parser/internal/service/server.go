@@ -21,6 +21,7 @@ import (
 	"github.com/nfnt/resize"
 
 	"imageparser/internal/registry"
+	"imageparser/internal/vendorsdk"
 )
 
 const maxImageOutput = 64 << 20
@@ -63,7 +64,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 			parserCount++
 		}
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": false})
+	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": vendorsdk.Enabled()})
 }
 
 func (s *Server) formats(w http.ResponseWriter, _ *http.Request) {
@@ -95,7 +96,7 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status": "READY", "format": entry.capability.Format, "adapterType": "GO_PARSER",
-		"sdkStatus": "AVAILABLE", "width": header.Width, "height": header.Height,
+		"sdkStatus": entry.capability.Status, "width": header.Width, "height": header.Height,
 		"levelCount": len(levels), "levels": levels,
 		"properties": map[string]any{"engine": entry.capability.Engine, "sourceStatus": entry.capability.Status, "mpp": header.Mpp},
 	})

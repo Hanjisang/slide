@@ -101,10 +101,10 @@ docker compose down
 | SVS | OpenSlide | `AVAILABLE` | 真实 metadata、thumbnail、Tile 和浏览器验收 |
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
-| CSP | Go CGO | `LICENSE_REQUIRED` | 有真实样本，但缺可确认授权的 SDK 与运行许可，默认构建隔离 |
-| HWP / TRON | Vendor SDK | `COMPATIBILITY_REQUIRED` | 有真实样本和本地 Linux ELF SDK；v0.3 未集成匹配的 adapter/ABI，不能安全调用 |
+| CSP | Go Native | `TEST_DATA_REQUIRED` | 纯 Go parser 与自动化 fixture 已完成，待人工真实切片验收 |
+| HWP / TRON | Vendor SDK Runtime | `TEST_DATA_REQUIRED` | 动态 SDK adapter 与自动化 fake-runtime 测试已完成，待人工真实切片验收 |
 
-代码存在不等于 `AVAILABLE`。本轮 12 份匿名真实样本的完整证据见 [样本清单](docs/v0.3-real-sample-inventory.md) 和 [统一验收报告](docs/v0.3-real-slide-acceptance.md)。
+代码存在不等于 `AVAILABLE`。CSP/HWP/TRON 在人工真实切片验证完成前固定为 `TEST_DATA_REQUIRED`；既有 12 份匿名真实样本的历史证据见 [样本清单](docs/v0.3-real-sample-inventory.md) 和 [统一验收报告](docs/v0.3-real-slide-acceptance.md)。
 
 ## 当前限制
 

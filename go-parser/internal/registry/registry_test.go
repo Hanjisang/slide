@@ -12,12 +12,14 @@ func TestCapabilitiesReflectRealSlideAcceptance(t *testing.T) {
 		t.Fatalf("expected 10 Go/vendor formats, got %d", len(formats))
 	}
 	for _, format := range formats {
-		native := format.Engine == "GO_NATIVE"
-		if native && (format.Status != StatusAvailable || !format.Tested || !format.Build) {
+		completedNative := format.Engine == "GO_NATIVE" && format.Format != "CSP"
+		if completedNative && (format.Status != StatusAvailable || !format.Tested || !format.Build) {
 			t.Fatalf("%s must expose completed real-slide evidence", format.Format)
 		}
-		if !native && format.Status == StatusAvailable {
-			t.Fatalf("%s must not be AVAILABLE without an integrated runtime", format.Format)
+		if format.Format == "CSP" || format.Format == "HWP" || format.Format == "TRON" {
+			if format.Status != StatusTestDataRequired || !format.Build || format.Tested {
+				t.Fatalf("%s must remain built but TEST_DATA_REQUIRED before manual validation: %+v", format.Format, format)
+			}
 		}
 	}
 }
@@ -43,7 +45,7 @@ func TestOptionalSDKFormatsRemainIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, capability, err := New().Open(path)
-	if err == nil || capability.Status != StatusCompatibilityRequired {
-		t.Fatalf("expected isolated COMPATIBILITY_REQUIRED capability, got %q / %v", capability.Status, err)
+	if err == nil || capability.Status != StatusTestDataRequired {
+		t.Fatalf("expected isolated TEST_DATA_REQUIRED capability, got %q / %v", capability.Status, err)
 	}
 }
