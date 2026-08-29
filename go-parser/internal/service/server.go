@@ -90,6 +90,7 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 		levels = append(levels, map[string]any{
 			"level": browserLevel, "width": max(1, int(math.Ceil(float64(header.Width)/downsample))),
 			"height": max(1, int(math.Ceil(float64(header.Height)/downsample))), "downsample": downsample,
+			"tileSize": max(256, header.BlockSize),
 		})
 	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
@@ -181,7 +182,7 @@ func (s *Server) tile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	data, err := normalizeImage(buffer.Bytes(), 256, true)
+	data, err := normalizeImage(buffer.Bytes(), max(256, entry.header.BlockSize), true)
 	if err != nil {
 		s.writeError(w, http.StatusUnprocessableEntity, err)
 		return

@@ -49,7 +49,7 @@ func TestAnalyzeRejectsInvalidAndMissingSlideIDs(t *testing.T) {
 	}
 }
 
-func TestNormalizeTileProducesStable256JPEG(t *testing.T) {
+func TestNormalizeTilePreservesConfiguredTileSize(t *testing.T) {
 	input := image.NewRGBA(image.Rect(0, 0, 32, 16))
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 32; x++ {
@@ -60,15 +60,17 @@ func TestNormalizeTileProducesStable256JPEG(t *testing.T) {
 	if err := jpeg.Encode(encoded, input, nil); err != nil {
 		t.Fatal(err)
 	}
-	result, err := normalizeImage(encoded.Bytes(), 256, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	decoded, err := jpeg.Decode(bytes.NewReader(result))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded.Bounds().Dx() != 256 || decoded.Bounds().Dy() != 256 {
-		t.Fatalf("unexpected normalized dimensions: %v", decoded.Bounds())
+	for _, tileSize := range []int{256, 512} {
+		result, err := normalizeImage(encoded.Bytes(), tileSize, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := jpeg.Decode(bytes.NewReader(result))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decoded.Bounds().Dx() != tileSize || decoded.Bounds().Dy() != tileSize {
+			t.Fatalf("unexpected normalized dimensions for %d: %v", tileSize, decoded.Bounds())
+		}
 	}
 }

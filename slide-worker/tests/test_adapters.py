@@ -12,6 +12,28 @@ def test_svs_remains_on_openslide():
     assert adapter.sdk_status == "AVAILABLE"
 
 
+def test_svs_metadata_uses_ready_worker_protocol(monkeypatch):
+    class FakeSlide:
+        dimensions = (4096, 2048)
+        level_count = 2
+        level_dimensions = ((4096, 2048), (1024, 512))
+        level_downsamples = (1.0, 4.0)
+        properties = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+    monkeypatch.setattr("app.adapters.openslide.OpenSlide", lambda _path: FakeSlide())
+    metadata = OpenSlideAdapter().get_metadata("SVS_SAMPLE_01.svs")
+    assert metadata["status"] == "READY"
+    assert metadata["format"] == "SVS"
+    assert metadata["width"] == 4096
+    assert metadata["levelCount"] == 2
+
+
 def test_go_parser_slide_id_is_derived_from_fixed_cache_layout(tmp_path: Path):
     slide = tmp_path / "42" / "sample.kfb"
     slide.parent.mkdir()

@@ -1,66 +1,51 @@
 # 实施进度
 
-更新时间：2026-08-18
+更新时间：2026-08-29
 
-## v0.3.0 多格式解析已完成工程化
+## v0.3.0 多格式真实切片验收
 
-- 当前分支：`feature/v0.3-multiformat-parser`，基于完整 v0.2 提交 `982cd63`，未合并 `main`。
-- P23：独立 `go-parser` module、FileStreamer、最小 types/utils、Registry、HTTP API、ParserCache 和 Docker 构建完成。
-- P24：Python `GoParserAdapter`、动态能力发现、30/15 秒调用超时与 Go Down 降级完成；SVS 继续由 OpenSlide 处理。
-- P25-P28：KFB、TMAP06/07、MDSX、DMETRIX、FENLAN、ZYP 的纯 Go 算法接入完成；DMETRIX/FENLAN 已完成真实样本兼容性专项并升级为 `AVAILABLE`。
-- P29：SDPC 结构/JPEG/BMP 路径完成，HEVC 隔离为 `DECODER_REQUIRED`；颜色校正和编码图片分配已加固。
-- P34：确认真实 SDPC Tile 为标准 HEVC Annex-B；接入受控 FFmpeg 解码器，完成真实样本多层级、多坐标、边缘 Tile、性能和并发验证，状态升级为 `AVAILABLE`。
-- P30-P31：CSP 标记 `SDK_BUNDLED` 但因无再分发许可不进入默认构建；HWP/TRON 缺 SDK，均隔离且不影响服务启动。
-- P32：七服务 Compose、系统监控、Go Parser 告警、11 格式能力矩阵、SVS 回归与 Go Down 场景完成。
+- 当前分支：`feature/v0.3-multiformat-parser`，未合并 `main`。
+- P23-P34：独立 Go Parser、Worker 门面、七服务 Compose、KFB/TMAP/MDSX/DMETRIX/FENLAN/ZYP 纯 Go 路径和 SDPC FFmpeg HEVC 路径均已工程化。
+- P36：盘点 12 份真实文件，覆盖全部 11 种目标格式；样本只使用匿名别名且不进入 Git。
+- SVS、KFB、TMAP、MDSX、DMETRIX、FENLAN、ZYP、SDPC 已通过真实 metadata、thumbnail、计划/随机 Tile、5/10 并发和 100 Tile 稳定性验证。
+- 新增 `verify-slide` 统一验证命令，可扫描目录并输出匿名 JSON 证据。
+- 修复 SVS Worker metadata 缺少 `READY` 协议字段、MDSX 坐标轴校验，以及前端混合层级顺序/512 tileSize 处理。
+- KFB/TMAP/MDSX/ZYP 已从 `TEST_DATA_REQUIRED` 升级为 `AVAILABLE`。
+- HWP/TRON 的本地 SDK 是依赖可解析的 Linux amd64 ELF，但 v0.3 没有已验证的 adapter/ABI，状态为 `COMPATIBILITY_REQUIRED`。
+- CSP 有真实样本，但无可确认授权的 SDK 和运行许可，状态为 `LICENSE_REQUIRED`。
 
-## v0.2.0 基线已完成
+## P36 主要结果
 
-- 当前分支：`feature/v0.2-upgrade`，未合并 `main`。
-- P10-P13：SlideStorageService 拆分、多存储目标、切片管理、真实归档与上传时间策略完成。
-- P14-P16：文件资产/版本、批量操作、备份、四角色轻量授权和后端 403 校验完成。
-- P17-P19：UNIQUE/CROSS_FIELD/CROSS_RECORD、基础数据 CSV/XLSX、真实系统指标和告警闭环完成。
-- P20：病理病例选择、实际 SVS ZIP、模板、手工/定时计划、文件中心登记和 1/5/30 分钟重试完成。
-- P21：SVS 真实解析为 AVAILABLE；该能力在 v0.3 继续保留。
-- P22：Maven、前端、Docker、API、对象存储和浏览器验收完成。
+| Format | Samples | Metadata | Planned tiles | Random | 5/10 concurrent | Stability | Status |
+|---|---:|---|---:|---:|---|---:|---|
+| SVS | 1 | 31619×23152 / 3 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| KFB | 1 | 28034×27778 / 8 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| TMAP | 1 | 69712×21329 / 6 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| MDSX | 1 | 82767×163449 / 10 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| DMETRIX | 1 | 50978×57093 / 9 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| FENLAN | 1 | 3308×2847 / 2 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| ZYP | 1 | 32768×31232 / 10 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| SDPC | 1 | 83328×91392 / 8 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
+| HWP | 2 | blocked before parser | — | — | — | — | `COMPATIBILITY_REQUIRED` |
+| TRON | 1 | blocked before parser | — | — | — | — | `COMPATIBILITY_REQUIRED` |
+| CSP | 1 | blocked before parser | — | — | — | — | `LICENSE_REQUIRED` |
 
-## v0.3 实际测试
+TMAP/ZYP 的部分抽样 Tile 被图像哨兵标为 `ALL_WHITE`，请求与解码均成功；这是背景内容告警，不计解析失败。SDPC 因每 Tile 启动 FFmpeg 子进程，性能明显低于纯 Go JPEG/BMP 路径，详见统一验收报告。
 
-- `go test ./...`：通过；覆盖 11 个顶层测试，包括 Streamer 越界、截断厂家文件、Registry 状态、HTTP、256 JPEG 和 SDPC 分配边界。
-- `pytest`：4 passed；验证 Go 能力降级短缓存、固定缓存路径和 SVS 优先 OpenSlide。
-- `mvn -q test`：7 个测试类通过；`npm run build` 通过，仅有非阻断 bundle size warning。
-- Go Docker 镜像在 `CGO_ENABLED=0` 下通过测试与构建。
-- Docker Compose：MySQL、MinIO、go-parser、slide-worker、backend、frontend、nginx 七服务运行。
-- Go health：`UP`、7 个已注册 Parser、`cgo=false`；Worker：`UP`、11 个 Adapter；Backend 监控显示 Go Parser `UP`。
-- 真实 SVS：`CMU-1-Small-Region.svs`，1,938,955 bytes，2220 x 2967；metadata、thumbnail、两个 Tile 和 OpenSeadragon 通过。
-- Go Down：Worker 保持 `UP`，SVS metadata/Tile 继续成功；Go 格式能力降级为 `PARSER_UNAVAILABLE`。
-- 浏览器：11 格式能力矩阵和 Go Parser 监控正常；桌面与 390 x 844 无页面级横向溢出。
+## 自动化与构建
 
-## v0.2 基线测试
+- Go：`go test ./...` 通过；Dockerfile 在 `CGO_ENABLED=0` 下执行全包测试并构建 `go-parser`、`verify-slide`。
+- Worker：`pytest` 5 passed，包含 OpenSlide `READY` 协议回归。
+- Frontend：TypeScript 检查与 Vite production build 通过；仅保留已有 bundle-size warning。
+- Compose：MySQL、MinIO、Go Parser、Slide Worker、Backend、Frontend、Nginx 七服务已完成 no-cache 构建和健康启动；验收期间宿主机系统盘耗尽导致 Docker Desktop 控制面/MySQL 停止，属于宿主环境事件，不是 parser panic。
 
-- `mvn -q test`：7 个测试类通过，覆盖归档复制/MD5、备份、逻辑删除、权限 403、病理 ZIP 和 CSV BOM 往返。
-- `npm run build`：通过；仅有非阻断的 bundle size warning。
-- `docker compose up -d --build`：MySQL、MinIO、slide-worker、backend、frontend、nginx 六服务运行；健康检查通过。
-- 真实 SVS：1,938,955 bytes，OpenSlide 返回 `2220 x 2967`、`AVAILABLE`、真实 thumbnail/tile；下载 MD5 为 `1ad6e35c9d17e4d85fb7e3143b328efe`。
-- 真实归档：HOT 到 `pathology-archive`，源/目标大小和 MD5 一致，任务 100%，源对象保留。
-- 文件版本/备份：V1/V2 对象同时存在；BACKUP 对象实际存在且 MD5 一致。
-- 权限：VIEWER 查看切片 200，删除/归档/用户管理均 403；OPERATOR 上传、归档、上报通过。
-- 校验：重复病理号返回业务异常；入院时间晚于出院时间生成 CROSS_FIELD 异常，并完成修正闭环。
-- 病理包：ZIP 实际打开，含 manifest、患者/就诊/诊断/病理 JSON 与 2 张真实 SVS；生成物进入文件中心。
-- HTTP：500 后生成告警，调度器实际重试并从 1 分钟推进到 5 分钟；恢复 200 后人工上报成功。
-- 基础数据/监控：CSV 与 XLSX 往返 0 错误；CPU、内存、磁盘、JVM、存储目标和五类任务均为运行时数据。
-- 浏览器：桌面与 390 x 844 视口通过，无横向溢出；八域菜单及四个核心聚合页正常。
+## v0.2.0 基线
 
-## 外部依赖
+v0.2 的多存储目标、真实归档/备份、文件版本、RBAC、数据质量、病理 ZIP 和上报重试仍由既有 Maven/前端回归覆盖。本次未合并 `main`、未创建 tag，也未把真实切片或厂家 SDK 提交仓库。
 
-- KFB、TMAP、MDSX、DMETRIX、FENLAN、ZYP 已不依赖厂家 SDK，但缺真实文件 L3-L5 验收，状态为 `TEST_DATA_REQUIRED`。
-- SDPC 使用标准 FFmpeg 解码 HEVC Annex-B，真实样本已通过 HTTP 验证，状态为 `AVAILABLE`；浏览器链路未自动化验证。
-- CSP 原输入带 SDK，但未提供再分发许可，公开构建不包含二进制；HWP/TRON 分别缺 `libhwp_sdk.so`、`libtronc.so`。
-- 正式卫健委接口协议、签名方式、证书和接收地址未提供；当前以可配置模板、HTTP/File Sender 和 Mock HTTP 端点验收。
-- SQL Server、Oracle、PostgreSQL、达梦连接验收需要目标环境与 JDBC 驱动。
+## 后续依赖
 
-## 已知限制
-
-- Token 为单实例内存会话，服务重启后需重新登录。
-- S3 兼容接口不能可靠获取后端总容量时明确显示 `UNKNOWN`。
-- 首屏依赖包仍有体积提示，不影响功能和运行。
-- 厂家格式未完成真实 metadata/thumbnail/多 Tile/浏览器验收前，不得标为 `AVAILABLE`。
+- HWP/TRON：需要厂家确认的函数签名、初始化/释放顺序、线程模型、匹配 SDK 版本和许可，再在隔离构建中实现并验收 adapter；不能仅因 `.so` 存在就标为可用。
+- CSP：先取得合法 SDK、运行许可证和再分发边界，再进行 CGO 隔离集成与真实文件验收。
+- SDPC：可优化为常驻解码进程或批处理，降低 FFmpeg 子进程启动开销。
+- 正式卫健委接口、SQL Server/Oracle/PostgreSQL/达梦仍需目标协议、证书、驱动和联调环境。

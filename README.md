@@ -99,13 +99,12 @@ docker compose down
 | 格式 | Engine | 状态 | 说明 |
 |---|---|---|---|
 | SVS | OpenSlide | `AVAILABLE` | 真实 metadata、thumbnail、Tile 和浏览器验收 |
-| KFB / TMAP / MDSX / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
-| DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
+| KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
-| CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
-| HWP / TRON | Vendor SDK | `SDK_REQUIRED` | 缺 Linux SDK 与真实样本 |
+| CSP | Go CGO | `LICENSE_REQUIRED` | 有真实样本，但缺可确认授权的 SDK 与运行许可，默认构建隔离 |
+| HWP / TRON | Vendor SDK | `COMPATIBILITY_REQUIRED` | 有真实样本和本地 Linux ELF SDK；v0.3 未集成匹配的 adapter/ABI，不能安全调用 |
 
-代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
+代码存在不等于 `AVAILABLE`。本轮 12 份匿名真实样本的完整证据见 [样本清单](docs/v0.3-real-sample-inventory.md) 和 [统一验收报告](docs/v0.3-real-slide-acceptance.md)。
 
 ## 当前限制
 
@@ -115,4 +114,4 @@ docker compose down
 - 不提供 MPI、FHIR/DICOM Server、病理 AI、消息队列和复杂工作流。
 - 大切片首次读取会下载到 Worker 持久缓存；Go Parser 只读共享缓存，并在进程内保存最多 128 个、TTL 30 分钟的 Parser 实例。
 
-升级既有数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.3 Parser 架构](docs/v0.3-parser-architecture.md)、[v0.3 验收](docs/v0.3-acceptance.md) 和 [当前进度](docs/progress.md)。
+升级既有数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.3 Parser 架构](docs/v0.3-parser-architecture.md)、[v0.3 验收](docs/v0.3-acceptance.md)、[真实切片统一验收](docs/v0.3-real-slide-acceptance.md) 和 [当前进度](docs/progress.md)。

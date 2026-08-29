@@ -58,13 +58,15 @@ class OpenSlideAdapter(SlideAdapter):
     def get_metadata(self, file_path: str) -> dict[str, Any]:
         with openslide.OpenSlide(file_path) as slide:
             return {
+                "status": "READY",
+                "format": "SVS",
                 "adapterType": self.name,
                 "sdkStatus": self.sdk_status,
                 "width": slide.dimensions[0],
                 "height": slide.dimensions[1],
                 "levelCount": slide.level_count,
                 "levels": [
-                    {"level": index, "width": size[0], "height": size[1], "downsample": slide.level_downsamples[index]}
+                    {"level": index, "width": size[0], "height": size[1], "downsample": slide.level_downsamples[index], "tileSize": 256}
                     for index, size in enumerate(slide.level_dimensions)
                 ],
                 "properties": {key: value for key, value in slide.properties.items() if len(str(value)) < 500},

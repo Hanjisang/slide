@@ -23,10 +23,9 @@ import (
 type Status string
 
 const (
-	StatusTestDataRequired Status = "TEST_DATA_REQUIRED"
-	StatusDecoderRequired  Status = "DECODER_REQUIRED"
-	StatusSDKBundled       Status = "SDK_BUNDLED"
-	StatusSDKRequired      Status = "SDK_REQUIRED"
+	StatusAvailable             Status = "AVAILABLE"
+	StatusLicenseRequired       Status = "LICENSE_REQUIRED"
+	StatusCompatibilityRequired Status = "COMPATIBILITY_REQUIRED"
 )
 
 type Capability struct {
@@ -54,16 +53,16 @@ type Registry struct {
 
 func New() *Registry {
 	entries := []entry{
-		{Capability: native("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
-		{Capability: native("TMAP", ".tmap"), newParser: tmap.New},
-		{Capability: native("MDSX", ".mdsx"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return mdsx.New(s) }},
+		{Capability: availableNative("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
+		{Capability: availableNative("TMAP", ".tmap"), newParser: tmap.New},
+		{Capability: availableNative("MDSX", ".mdsx"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return mdsx.New(s) }},
 		{Capability: availableNative("DMETRIX", ".dmetrix"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return dmetrix.New(s) }},
 		{Capability: availableNative("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
-		{Capability: native("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
-		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
-		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusSDKBundled, Extensions: []string{".csp"}, Build: false, Missing: "authorized libcsp_sdk.so in vendor-libs", SourceIncluded: false}},
-		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".hwp"}, Build: false, Missing: "libhwp_sdk.so", SourceIncluded: false}},
-		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK", Status: StatusSDKRequired, Extensions: []string{".tron"}, Build: false, Missing: "libtronc.so", SourceIncluded: false}},
+		{Capability: availableNative("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
+		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
+		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusLicenseRequired, Extensions: []string{".csp"}, Build: false, Missing: "authorized CSP SDK and runtime license", SourceIncluded: false}},
+		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK", Status: StatusCompatibilityRequired, Extensions: []string{".hwp"}, Build: false, Missing: "compatible SDK adapter and verified ABI", SourceIncluded: false}},
+		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK", Status: StatusCompatibilityRequired, Extensions: []string{".tron"}, Build: false, Missing: "compatible SDK adapter and verified ABI", SourceIncluded: false}},
 	}
 	r := &Registry{byExtension: make(map[string]entry, len(entries))}
 	for _, item := range entries {
@@ -76,12 +75,8 @@ func New() *Registry {
 	return r
 }
 
-func native(format, extension string) Capability {
-	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "real vendor slide for L3-L5 validation", SourceIncluded: true}
-}
-
 func availableNative(format, extension string) Capability {
-	return Capability{Format: format, Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
+	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
 }
 
 func (r *Registry) Formats() []Capability {
