@@ -13,7 +13,7 @@ func (platformRuntime) close(uintptr) {}
 func (platformRuntime) metadata(uintptr) (metadata, error) {
 	return metadata{}, errors.New("Linux CGO runtime is required")
 }
-func (platformRuntime) readTile(uintptr, uint32, uint32, uint32, uint32, uint64) ([]byte, error) {
+func (platformRuntime) readTile(uintptr, uint32, uint32, uint32, uint32) ([]byte, error) {
 	return nil, errors.New("Linux CGO runtime is required")
 }
 func (platformRuntime) readNamed(uintptr, string) ([]byte, error) {

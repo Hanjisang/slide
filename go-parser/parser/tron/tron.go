@@ -1,8 +1,11 @@
 package tron
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"runtime"
 	"sync"
@@ -13,6 +16,7 @@ import (
 
 type metadata struct {
 	width, height         uint32
+	contentX, contentY    uint32
 	tileWidth, tileHeight uint32
 	lodMin, lodMax        uint32
 	layerIndex            uint32
@@ -33,8 +37,11 @@ type parser struct {
 	reader uintptr
 	meta   metadata
 	header types.HeaderInfo
+	blank  []byte
 	mu     sync.Mutex
 }
+
+var errTRONTileMissing = errors.New("TRON tile is not stored")
 
 // New opens TRON through a runtime-loaded vendor library. The adapter ABI is
 // isolated here so the service can start normally when the local SDK is absent.
@@ -65,7 +72,12 @@ func newWithRuntime(s streamer.Streamer, native nativeRuntime) (*parser, error) 
 	if mpp <= 0 {
 		mpp = meta.mppY
 	}
-	p := &parser{stream: s, native: native, reader: reader, meta: meta}
+	blank, err := blankTRONTile(meta.tileWidth, meta.tileHeight)
+	if err != nil {
+		native.close(reader)
+		return nil, err
+	}
+	p := &parser{stream: s, native: native, reader: reader, meta: meta, blank: blank}
 	p.header = types.NewHeaderInfo(s.GetFileName(), 0, int(meta.lodMax-meta.lodMin), int(meta.height), int(meta.width), 0, 2, 0, 0, mpp, max(int(meta.tileWidth), int(meta.tileHeight)))
 	runtime.SetFinalizer(p, (*parser).finalize)
 	return p, nil
@@ -105,17 +117,38 @@ func (p *parser) GetImage(layer, line, row int, w io.Writer) error {
 	// TRON numbers LOD from full resolution toward lower resolutions; the
 	// service exposes the inverse, browser-friendly low-to-high order.
 	nativeLOD := p.meta.lodMax - uint32(layer)
+	// Archive tile coordinates are expressed against the uncropped slide
+	// canvas, while the viewer addresses the content region from (0, 0).
+	// Preserve the content-region origin and translate into the native grid.
+	nativeScale := uint64(1) << nativeLOD
+	nativeCol := uint32(uint64(line) + uint64(p.meta.contentX)/(uint64(p.meta.tileWidth)*nativeScale))
+	nativeRow := uint32(uint64(row) + uint64(p.meta.contentY)/(uint64(p.meta.tileHeight)*nativeScale))
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.reader == 0 {
 		return errors.New("TRON reader is closed")
 	}
-	data, err := p.native.readTile(p.reader, nativeLOD, p.meta.layerIndex, uint32(line), uint32(row))
+	data, err := p.native.readTile(p.reader, nativeLOD, p.meta.layerIndex, nativeCol, nativeRow)
+	if errors.Is(err, errTRONTileMissing) {
+		data, err = p.blank, nil
+	}
 	if err != nil {
 		return fmt.Errorf("TRON tile: %w", err)
 	}
 	_, err = w.Write(data)
 	return err
+}
+
+func blankTRONTile(width, height uint32) ([]byte, error) {
+	img := image.NewGray(image.Rect(0, 0, int(width), int(height)))
+	for i := range img.Pix {
+		img.Pix[i] = 0xff
+	}
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, img, &jpeg.Options{Quality: 85}); err != nil {
+		return nil, fmt.Errorf("encode blank TRON tile: %w", err)
+	}
+	return output.Bytes(), nil
 }
 
 func (p *parser) GetThumbnailImagePathFunc(w io.Writer) error { return p.writeNamed(w, "thumbnail") }

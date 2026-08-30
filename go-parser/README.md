@@ -8,9 +8,9 @@
 |---|---|---|---|
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
-| CSP | Go Native | `TEST_DATA_REQUIRED` | 基于公开 OpenCsp 格式实现分段读取、金字塔/附件索引和安全边界，尚未人工真实切片验收 |
+| CSP | Go Native | `AVAILABLE` | 真实样本完成 10 层 metadata、thumbnail、Tile 和浏览器人工验收 |
 | HWP | Vendor SDK + native helper | `AVAILABLE` | 当前 SDK 的兼容真实样本已完成 7 层 metadata、附件、Tile 和浏览器人工复验 |
-| TRON | Vendor SDK Runtime | `TEST_DATA_REQUIRED` | adapter 已实现，SDK 运行时动态加载；尚未人工真实切片验收 |
+| TRON | Vendor SDK Runtime | `AVAILABLE` | 当前本地 SDK 的真实样本完成 8 层 metadata、稀疏 Tile、thumbnail 和浏览器人工验收 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 

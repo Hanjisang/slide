@@ -12,7 +12,7 @@
 - 修复 SVS Worker metadata 缺少 `READY` 协议字段、MDSX 坐标轴校验，以及前端混合层级顺序/512 tileSize 处理。
 - KFB/TMAP/MDSX/ZYP 已从 `TEST_DATA_REQUIRED` 升级为 `AVAILABLE`。
 - FINAL 开发收口：CSP 纯 Go 分段读取 parser、HWP/TRON 动态 SDK adapter、缓存原生句柄释放和 glibc 容器集成已完成。
-- HWP 已完成兼容真实切片的 metadata、附件、7 层 Tile 和浏览器人工复验，状态升级为 `AVAILABLE`；CSP/TRON 仍为 `TEST_DATA_REQUIRED`。
+- HWP、TRON 与 CSP 已完成真实切片复验：HWP 7 层、TRON 8 层稀疏瓦片、CSP 10 层均通过，三者状态均为 `AVAILABLE`。
 
 ## P36 主要结果
 
@@ -27,8 +27,8 @@
 | ZYP | 1 | 32768×31232 / 10 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | SDPC | 1 | 83328×91392 / 8 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | HWP | 1/2 compatible | 52053×11520 / 7 | 23/23 | 用户复验通过 | 已完成本地链路复验 | 浏览器通过 | `AVAILABLE` |
-| TRON | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
-| CSP | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
+| TRON | 1 | 73800×83232 / 8 | 8/8 | 用户复验通过 | 本地链路复验通过 | 浏览器通过 | `AVAILABLE` |
+| CSP | 1 | 59136×45824 / 10 | 10/10 | 用户复验通过 | 本地链路复验通过 | 浏览器通过 | `AVAILABLE` |
 
 TMAP/ZYP 的部分抽样 Tile 被图像哨兵标为 `ALL_WHITE`，请求与解码均成功；这是背景内容告警，不计解析失败。SDPC 因每 Tile 启动 FFmpeg 子进程，性能明显低于纯 Go JPEG/BMP 路径，详见统一验收报告。
 
@@ -46,7 +46,7 @@ v0.2 的多存储目标、真实归档/备份、文件版本、RBAC、数据质�
 ## 后续依赖
 
 - HWP：当前本地 Linux SDK 的兼容真实样本已验收通过；状态绑定该 SDK/ABI，另一份生成测试件仍不兼容。
-- TRON：adapter 已按本地 Linux SDK 导出 ABI 实现；下一步做人工真实切片的 metadata、附件、层级/坐标和稳定性验收，验收前不能标为 `AVAILABLE`。
-- CSP：纯 Go parser 已基于公开 OpenCsp 格式完成；下一步做人工真实切片验收，验收前不能标为 `AVAILABLE`。
+- TRON：当前本地 Linux SDK/ABI 已验收通过；厂家 SDK 仍只允许仓库外只读挂载，分发许可需由交付环境单独确认。
+- CSP：纯 Go parser 已基于公开 OpenCsp 格式完成并通过真实样本验收，不依赖厂家 SDK。
 - SDPC：可优化为常驻解码进程或批处理，降低 FFmpeg 子进程启动开销。
 - 正式卫健委接口、SQL Server/Oracle/PostgreSQL/达梦仍需目标协议、证书、驱动和联调环境。

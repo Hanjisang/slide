@@ -137,7 +137,7 @@ func (platformRuntime) metadata(reader uintptr) (metadata, error) {
 	region := C.tron_content_region(C.uintptr_t(reader))
 	lod := C.tron_lod_range(C.uintptr_t(reader))
 	resolution := C.tron_resolution(C.uintptr_t(reader))
-	return metadata{width: uint32(region.width), height: uint32(region.height), tileWidth: uint32(tileSize.first), tileHeight: uint32(tileSize.second), lodMin: uint32(lod.first), lodMax: uint32(lod.second), layerIndex: uint32(C.tron_representative_layer(C.uintptr_t(reader))), mppX: float32(resolution.first), mppY: float32(resolution.second)}, nil
+	return metadata{width: uint32(region.width), height: uint32(region.height), contentX: uint32(region.x), contentY: uint32(region.y), tileWidth: uint32(tileSize.first), tileHeight: uint32(tileSize.second), lodMin: uint32(lod.first), lodMax: uint32(lod.second), layerIndex: uint32(C.tron_representative_layer(C.uintptr_t(reader))), mppX: float32(resolution.first), mppY: float32(resolution.second)}, nil
 }
 
 func copyTRONData(length uint64, fill func(unsafe.Pointer) uint64) ([]byte, error) {
@@ -195,7 +195,7 @@ func (platformRuntime) readTile(reader uintptr, lod, layer, col, row uint32) ([]
 	defer tronSDKMu.Unlock()
 	info := C.tron_tile_info(C.uintptr_t(reader), C.uint32_t(lod), C.uint32_t(layer), C.uint32_t(col), C.uint32_t(row))
 	if info.valid == 0 {
-		return nil, fmt.Errorf("tron_get_tile_image_info failed for %d/%d/%d/%d (TRON error %d)", lod, layer, col, row, int32(C.tron_last_error()))
+		return nil, fmt.Errorf("%w for %d/%d/%d/%d (TRON error %d)", errTRONTileMissing, lod, layer, col, row, int32(C.tron_last_error()))
 	}
 	data, err := copyTRONData(uint64(info.length), func(out unsafe.Pointer) uint64 {
 		return uint64(C.tron_tile_data(C.uintptr_t(reader), C.uint32_t(lod), C.uint32_t(layer), C.uint32_t(col), C.uint32_t(row), out))

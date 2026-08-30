@@ -12,14 +12,8 @@ func TestCapabilitiesReflectRealSlideAcceptance(t *testing.T) {
 		t.Fatalf("expected 10 Go/vendor formats, got %d", len(formats))
 	}
 	for _, format := range formats {
-		accepted := (format.Engine == "GO_NATIVE" && format.Format != "CSP") || format.Format == "HWP"
-		if accepted && (format.Status != StatusAvailable || !format.Tested || !format.Build) {
+		if format.Status != StatusAvailable || !format.Tested || !format.Build {
 			t.Fatalf("%s must expose completed real-slide evidence", format.Format)
-		}
-		if format.Format == "CSP" || format.Format == "TRON" {
-			if format.Status != StatusTestDataRequired || !format.Build || format.Tested {
-				t.Fatalf("%s must remain built but TEST_DATA_REQUIRED before manual validation: %+v", format.Format, format)
-			}
 		}
 	}
 }
@@ -39,13 +33,17 @@ func TestNativeParsersFailSafelyOnTruncatedData(t *testing.T) {
 	}
 }
 
-func TestAcceptedHWPFormatStillFailsSafelyOnInvalidInput(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "slide.hwp")
-	if err := os.WriteFile(path, []byte("not an hwp"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, capability, err := New().Open(path)
-	if err == nil || capability.Status != StatusAvailable {
-		t.Fatalf("expected accepted HWP capability with a safe parse error, got %q / %v", capability.Status, err)
+func TestAcceptedFinalFormatsStillFailSafelyOnInvalidInput(t *testing.T) {
+	for _, extension := range []string{".csp", ".hwp", ".tron"} {
+		t.Run(extension, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "slide"+extension)
+			if err := os.WriteFile(path, []byte("not a slide"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, capability, err := New().Open(path)
+			if err == nil || capability.Status != StatusAvailable {
+				t.Fatalf("expected accepted %s capability with a safe parse error, got %q / %v", extension, capability.Status, err)
+			}
+		})
 	}
 }
