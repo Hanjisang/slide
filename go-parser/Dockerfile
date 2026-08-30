@@ -9,7 +9,7 @@ RUN mkdir -p /out \
     && CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/go-parser ./cmd/server \
     && CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/verify-slide ./cmd/verify-slide
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS runtime
 RUN apt-get -o Acquire::Retries=5 update \
     && apt-get -o Acquire::Retries=5 install -y --no-install-recommends ca-certificates ffmpeg libstdc++6 wget \
     && rm -rf /var/lib/apt/lists/* \
@@ -21,3 +21,11 @@ COPY --from=build /out/hwp-helper /usr/local/bin/hwp-helper
 USER parser
 EXPOSE 8100
 ENTRYPOINT ["/usr/local/bin/go-parser"]
+
+FROM runtime AS vendor
+USER root
+COPY --from=vendor-libs hwp/libhwp_sdk.so /opt/vendor-libs/hwp/libhwp_sdk.so
+COPY --from=vendor-libs tron/libtronc.so /opt/vendor-libs/tron/libtronc.so
+ENV HWP_SDK_PATH=/opt/vendor-libs/hwp/libhwp_sdk.so \
+    TRON_SDK_PATH=/opt/vendor-libs/tron/libtronc.so
+USER parser

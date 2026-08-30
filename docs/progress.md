@@ -46,7 +46,7 @@ v0.2 的多存储目标、真实归档/备份、文件版本、RBAC、数据质�
 ## 后续依赖
 
 - HWP：当前本地 Linux SDK 的兼容真实样本已验收通过；状态绑定该 SDK/ABI，另一份生成测试件仍不兼容。
-- TRON：当前本地 Linux SDK/ABI 已验收通过；厂家 SDK 仍只允许仓库外只读挂载，分发许可需由交付环境单独确认。
+- TRON：当前 Linux SDK/ABI 已验收通过；私有 vendor 镜像已内置 SDK，厂家文件仍不进入 Git，分发许可需由交付环境确认。
 - CSP：纯 Go parser 已基于公开 OpenCsp 格式完成并通过真实样本验收，不依赖厂家 SDK。
 - SDPC：可优化为常驻解码进程或批处理，降低 FFmpeg 子进程启动开销。
 - 正式卫健委接口、SQL Server/Oracle/PostgreSQL/达梦仍需目标协议、证书、驱动和联调环境。

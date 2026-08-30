@@ -39,7 +39,9 @@ services:
       retries: 30
 
   go-parser:
-    build: ./go-parser
+    build:
+      context: ./go-parser
+      target: runtime
     environment:
       SLIDE_CACHE_DIR: /data/slides
       TZ: Asia/Shanghai
@@ -53,7 +55,11 @@ services:
       retries: 20
 
   go-parser-vendor:
-    build: ./go-parser
+    build:
+      context: ./go-parser
+      target: vendor
+      additional_contexts:
+        vendor-libs: ./vendor-libs-local
     # The vendor HWP library crashes while opening valid MEDIC slides under an
     # unprivileged uid. Keep that ABI quirk inside this read-only sidecar.
     user: "0:0"
@@ -74,7 +80,6 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - slide_cache:/data/slides:ro
-      - ./vendor-libs-local:/opt/vendor-libs:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]

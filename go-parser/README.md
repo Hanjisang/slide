@@ -1,6 +1,6 @@
 # Go Multi-format Slide Parser
 
-内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。默认镜像为 Linux amd64/glibc + CGO，不直接访问 MinIO，也不对公网暴露。HWP/TRON SDK 仅从只读本地 volume 动态加载，缺失时不影响服务启动和其他格式。
+内部 HTTP 服务，为 Python Slide Worker 提供厂家数字切片解析能力。镜像为 Linux amd64/glibc + CGO，不直接访问 MinIO，也不对公网暴露。普通 `runtime` target 不含厂家 SDK；私有发布使用 `vendor` target，将 HWP/TRON Linux SDK 写入镜像。
 
 ## 支持状态
 
@@ -19,7 +19,8 @@ SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析�
 ```bash
 go test ./...
 CGO_ENABLED=1 go build -o go-parser ./cmd/server
-docker build -t medical-go-parser:0.3.0 .
+docker build --target runtime -t medical-go-parser:0.3.0 .
+docker compose build go-parser-vendor
 ```
 
 Dockerfile 会先执行全包测试，再用非 root 用户启动。服务监听 `:8100`，缓存根目录来自 `SLIDE_CACHE_DIR`，默认 `/data/slides`。CSP 不依赖 CGO；启用 CGO 是为了运行时调用 HWP/TRON Linux SDK。
@@ -53,18 +54,15 @@ verify-slide --dir /samples --all --random 20 --performance 10 --concurrency 5,1
 ```bash
 docker run --rm -p 8100:8100 \
   -e SLIDE_CACHE_DIR=/data/slides \
-  -e HWP_SDK_PATH=/opt/vendor-libs/hwp/libhwp_sdk.so \
-  -e TRON_SDK_PATH=/opt/vendor-libs/tron/libtronc.so \
   -v /absolute/slide-cache:/data/slides:ro \
-  -v /absolute/vendor-libs-local:/opt/vendor-libs:ro \
-  medical-go-parser:0.3.0
+  medical-go-parser-vendor:0.3.0
 ```
 
 每个 ID 目录放一个待解析文件，例如 `/data/slides/42/example.kfb`，然后调用 `POST /api/slides/42/analyze`。HWP 在 Compose 中通过隔离 sidecar 和原生 helper 调用 SDK，避免 SDK 故障导致 Go parser 退出。
 
 ## 厂家 SDK
 
-`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交。HWP 原生 helper 与 TRON runtime adapter 分别动态加载 `HWP_SDK_PATH`、`TRON_SDK_PATH`；镜像和仓库不包含 `.so`、`.dll` 或厂家头文件，SDK 缺失只会让对应文件初始化失败。CSP 为纯 Go，不需要厂家 SDK。OpenCsp 来源与许可见仓库根目录 `THIRD_PARTY_NOTICES.md`。
+`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交。私有 `go-parser-vendor` 镜像在构建时通过 Compose named build context 仅复制 `hwp/libhwp_sdk.so` 与 `tron/libtronc.so`，不复制 Windows DLL 或厂家头文件；普通 `go-parser` 镜像仍不含 SDK。HWP 原生 helper 与 TRON runtime adapter 分别从镜像内 `HWP_SDK_PATH`、`TRON_SDK_PATH` 动态加载。CSP 为纯 Go，不需要厂家 SDK。OpenCsp 来源与许可见仓库根目录 `THIRD_PARTY_NOTICES.md`。
 
 ## 测试数据
 
