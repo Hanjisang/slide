@@ -17,14 +17,13 @@ type metadata struct {
 	lodMin, lodMax        uint32
 	layerIndex            uint32
 	mppX, mppY            float32
-	maxImageBytes         uint64
 }
 
 type nativeRuntime interface {
 	open(string) (uintptr, error)
 	close(uintptr)
 	metadata(uintptr) (metadata, error)
-	readTile(uintptr, uint32, uint32, uint32, uint32, uint64) ([]byte, error)
+	readTile(uintptr, uint32, uint32, uint32, uint32) ([]byte, error)
 	readNamed(uintptr, string) ([]byte, error)
 }
 
@@ -58,9 +57,9 @@ func newWithRuntime(s streamer.Streamer, native nativeRuntime) (*parser, error) 
 	}
 	if meta.width == 0 || meta.height == 0 || meta.width > 2_000_000 || meta.height > 2_000_000 ||
 		meta.tileWidth == 0 || meta.tileHeight == 0 || meta.tileWidth > 4096 || meta.tileHeight > 4096 ||
-		meta.lodMax < meta.lodMin || meta.lodMax-meta.lodMin >= 32 || meta.maxImageBytes == 0 || meta.maxImageBytes > 64<<20 {
+		meta.lodMax < meta.lodMin || meta.lodMax-meta.lodMin >= 32 {
 		native.close(reader)
-		return nil, fmt.Errorf("invalid TRON metadata: image %dx%d tile %dx%d LOD %d..%d image-bytes %d", meta.width, meta.height, meta.tileWidth, meta.tileHeight, meta.lodMin, meta.lodMax, meta.maxImageBytes)
+		return nil, fmt.Errorf("invalid TRON metadata: image %dx%d tile %dx%d LOD %d..%d", meta.width, meta.height, meta.tileWidth, meta.tileHeight, meta.lodMin, meta.lodMax)
 	}
 	mpp := meta.mppX
 	if mpp <= 0 {
@@ -111,7 +110,7 @@ func (p *parser) GetImage(layer, line, row int, w io.Writer) error {
 	if p.reader == 0 {
 		return errors.New("TRON reader is closed")
 	}
-	data, err := p.native.readTile(p.reader, p.meta.layerIndex, nativeLOD, uint32(line), uint32(row), p.meta.maxImageBytes)
+	data, err := p.native.readTile(p.reader, nativeLOD, p.meta.layerIndex, uint32(line), uint32(row))
 	if err != nil {
 		return fmt.Errorf("TRON tile: %w", err)
 	}

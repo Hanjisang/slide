@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"imageparser/types"
 )
 
 func TestHealthAndFormats(t *testing.T) {
@@ -72,5 +74,17 @@ func TestNormalizeTilePreservesConfiguredTileSize(t *testing.T) {
 		if decoded.Bounds().Dx() != tileSize || decoded.Bounds().Dy() != tileSize {
 			t.Fatalf("unexpected normalized dimensions for %d: %v", tileSize, decoded.Bounds())
 		}
+	}
+}
+
+func TestBrowserLevelsPreserveStoredPyramid(t *testing.T) {
+	header := types.NewHeaderInfo("slide.hwp", 0, 1, 512, 1024, 20, 2, 0, 0, 0, 256)
+	header.Levels = []types.PyramidLevel{
+		{Width: 256, Height: 128, Downsample: 4, TileSize: 256},
+		{Width: 1024, Height: 512, Downsample: 1, TileSize: 256},
+	}
+	levels := browserLevels(header)
+	if len(levels) != 2 || levels[0]["width"] != 256 || levels[0]["downsample"] != float64(4) || levels[1]["width"] != 1024 {
+		t.Fatalf("unexpected stored pyramid: %+v", levels)
 	}
 }

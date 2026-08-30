@@ -9,7 +9,7 @@ from fastapi.responses import Response
 from minio import Minio
 from pydantic import BaseModel
 
-from .adapters import ADAPTERS, GO_PARSER, detect_format, find_adapter
+from .adapters import ADAPTERS, GO_PARSER, VENDOR_GO_PARSER, detect_format, find_adapter
 
 app = FastAPI(title="Medical Slide Worker", version="0.1.0")
 
@@ -47,7 +47,12 @@ def require_local(slide_id: int) -> Path:
 
 @app.get("/health")
 def health():
-    return {"status": "UP", "adapterCount": len(ADAPTERS), "goParser": GO_PARSER.health()}
+    return {
+        "status": "UP",
+        "adapterCount": len(ADAPTERS),
+        "goParser": GO_PARSER.health(),
+        "vendorGoParser": VENDOR_GO_PARSER.health(),
+    }
 
 
 @app.get("/api/adapters")

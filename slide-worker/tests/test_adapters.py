@@ -66,3 +66,35 @@ def test_go_parser_caches_unavailable_format_result(monkeypatch):
     assert client.formats() == {}
     assert client.formats() == {}
     assert calls == 1
+
+
+def test_go_parser_client_uses_selected_environment(monkeypatch):
+    monkeypatch.setenv("TEST_VENDOR_PARSER_URL", "http://isolated-parser:9100/")
+    client = GoParserClient("TEST_VENDOR_PARSER_URL", "http://fallback:8100")
+    assert client.base_url == "http://isolated-parser:9100"
+
+
+def test_go_parser_adapter_uses_injected_client(tmp_path: Path):
+    class FakeClient:
+        def formats(self):
+            return {"HWP": {"format": "HWP", "status": "TEST_DATA_REQUIRED", "build": True}}
+
+        def analyze(self, slide_id: int):
+            return {"status": "READY", "slideId": slide_id}
+
+    slide = tmp_path / "17" / "sample.hwp"
+    slide.parent.mkdir()
+    slide.write_bytes(b"HW_MEDIC")
+    adapter = GoParserAdapter("HWP", ".hwp", FakeClient())
+    assert adapter.get_metadata(str(slide)) == {"status": "READY", "slideId": 17}
+
+
+def test_go_parser_analyze_preserves_structured_parser_error(monkeypatch):
+    response = httpx.Response(
+        422,
+        json={"status": "FAILED", "error": "HWP_UNSUPPORTED_MAGIC"},
+        request=httpx.Request("POST", "http://parser/api/slides/16/analyze"),
+    )
+    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: response)
+    result = GoParserClient(default_url="http://parser").analyze(16)
+    assert result == {"status": "FAILED", "error": "HWP_UNSUPPORTED_MAGIC"}

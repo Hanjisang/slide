@@ -3,7 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 go test ./... \
+RUN mkdir -p /out \
+    && gcc -O2 -Wall -Wextra -o /out/hwp-helper ./cmd/hwp-helper/main.c -ldl \
+    && CGO_ENABLED=1 go test ./... \
     && CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/go-parser ./cmd/server \
     && CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /out/verify-slide ./cmd/verify-slide
 
@@ -15,6 +17,7 @@ RUN apt-get -o Acquire::Retries=5 update \
     && useradd --system --gid parser --no-create-home parser
 COPY --from=build /out/go-parser /usr/local/bin/go-parser
 COPY --from=build /out/verify-slide /usr/local/bin/verify-slide
+COPY --from=build /out/hwp-helper /usr/local/bin/hwp-helper
 USER parser
 EXPOSE 8100
 ENTRYPOINT ["/usr/local/bin/go-parser"]

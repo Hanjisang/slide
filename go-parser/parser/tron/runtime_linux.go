@@ -21,10 +21,10 @@ typedef tron_pair_u32 (*tron_pair_fn)(void *);
 typedef tron_region (*tron_region_fn)(void *);
 typedef tron_pair_f32 (*tron_float_pair_fn)(void *);
 typedef uint32_t (*tron_u32_fn)(void *);
-typedef tron_image_info (*tron_image_info_fn)(void *);
+typedef tron_image_info (*tron_image_info_fn)(void *, uint32_t, uint32_t, uint32_t, uint32_t);
 typedef tron_image_info (*tron_named_info_fn)(void *, const char *);
-typedef uintptr_t (*tron_tile_data_fn)(void *, uint32_t, uint32_t, uint32_t, uint32_t, void *);
-typedef uintptr_t (*tron_named_data_fn)(void *, const char *, void *);
+typedef size_t (*tron_tile_data_fn)(void *, uint32_t, uint32_t, uint32_t, uint32_t, void *);
+typedef size_t (*tron_named_data_fn)(void *, const char *, void *);
 
 typedef struct {
   void *lib;
@@ -76,16 +76,19 @@ static tron_region tron_content_region(uintptr_t p) { return api.content_region(
 static tron_pair_u32 tron_lod_range(uintptr_t p) { return api.lod_range((void *)p); }
 static tron_pair_f32 tron_resolution(uintptr_t p) { return api.resolution((void *)p); }
 static uint32_t tron_representative_layer(uintptr_t p) { return api.representative_layer((void *)p); }
-static tron_image_info tron_tile_info(uintptr_t p) { return api.tile_info((void *)p); }
+static tron_image_info tron_tile_info(uintptr_t p, uint32_t lod, uint32_t layer, uint32_t col, uint32_t row) { return api.tile_info((void *)p, lod, layer, col, row); }
 static tron_image_info tron_named_info(uintptr_t p, const char *name) { return api.named_info((void *)p, name); }
-static uintptr_t tron_tile_data(uintptr_t p, uint32_t layer, uint32_t lod, uint32_t col, uint32_t row, void *out) { return api.tile_data((void *)p, layer, lod, col, row, out); }
-static uintptr_t tron_named_data(uintptr_t p, const char *name, void *out) { return api.named_data((void *)p, name, out); }
+static size_t tron_tile_data(uintptr_t p, uint32_t lod, uint32_t layer, uint32_t col, uint32_t row, void *out) { return api.tile_data((void *)p, lod, layer, col, row, out); }
+static size_t tron_named_data(uintptr_t p, const char *name, void *out) { return api.named_data((void *)p, name, out); }
 */
 import "C"
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"os"
 	"sync"
 	"unsafe"
@@ -134,11 +137,7 @@ func (platformRuntime) metadata(reader uintptr) (metadata, error) {
 	region := C.tron_content_region(C.uintptr_t(reader))
 	lod := C.tron_lod_range(C.uintptr_t(reader))
 	resolution := C.tron_resolution(C.uintptr_t(reader))
-	info := C.tron_tile_info(C.uintptr_t(reader))
-	if info.valid == 0 {
-		return metadata{}, fmt.Errorf("tron_get_tile_image_info failed (TRON error %d)", int32(C.tron_last_error()))
-	}
-	return metadata{width: uint32(region.width), height: uint32(region.height), tileWidth: uint32(tileSize.first), tileHeight: uint32(tileSize.second), lodMin: uint32(lod.first), lodMax: uint32(lod.second), layerIndex: uint32(C.tron_representative_layer(C.uintptr_t(reader))), mppX: float32(resolution.first), mppY: float32(resolution.second), maxImageBytes: uint64(info.length)}, nil
+	return metadata{width: uint32(region.width), height: uint32(region.height), tileWidth: uint32(tileSize.first), tileHeight: uint32(tileSize.second), lodMin: uint32(lod.first), lodMax: uint32(lod.second), layerIndex: uint32(C.tron_representative_layer(C.uintptr_t(reader))), mppX: float32(resolution.first), mppY: float32(resolution.second)}, nil
 }
 
 func copyTRONData(length uint64, fill func(unsafe.Pointer) uint64) ([]byte, error) {
@@ -157,12 +156,54 @@ func copyTRONData(length uint64, fill func(unsafe.Pointer) uint64) ([]byte, erro
 	return C.GoBytes(buffer, C.int(written)), nil
 }
 
-func (platformRuntime) readTile(reader uintptr, layer, lod, col, row uint32, capacity uint64) ([]byte, error) {
+func encodeTRONImage(data []byte, width, height uint64) ([]byte, error) {
+	if len(data) >= 3 && data[0] == 0xff && data[1] == 0xd8 && data[2] == 0xff {
+		return data, nil
+	}
+	if width == 0 || height == 0 || width > 16384 || height > 16384 || width > uint64(^uint(0)>>1)/height {
+		return nil, fmt.Errorf("invalid TRON image dimensions %dx%d", width, height)
+	}
+	pixels := width * height
+	channels := uint64(0)
+	if uint64(len(data)) == pixels*3 {
+		channels = 3
+	} else if uint64(len(data)) == pixels*4 {
+		channels = 4
+	} else {
+		prefix := data
+		if len(prefix) > 12 {
+			prefix = prefix[:12]
+		}
+		return nil, fmt.Errorf("TRON SDK returned unsupported image payload: %dx%d bytes=%d prefix=%x", width, height, len(data), prefix)
+	}
+	img := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
+	for src, dst := 0, 0; src < len(data); src, dst = src+int(channels), dst+4 {
+		img.Pix[dst] = data[src]
+		img.Pix[dst+1] = data[src+1]
+		img.Pix[dst+2] = data[src+2]
+		img.Pix[dst+3] = 0xff
+	}
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, img, &jpeg.Options{Quality: 92}); err != nil {
+		return nil, err
+	}
+	return output.Bytes(), nil
+}
+
+func (platformRuntime) readTile(reader uintptr, lod, layer, col, row uint32) ([]byte, error) {
 	tronSDKMu.Lock()
 	defer tronSDKMu.Unlock()
-	return copyTRONData(capacity, func(out unsafe.Pointer) uint64 {
-		return uint64(C.tron_tile_data(C.uintptr_t(reader), C.uint32_t(layer), C.uint32_t(lod), C.uint32_t(col), C.uint32_t(row), out))
+	info := C.tron_tile_info(C.uintptr_t(reader), C.uint32_t(lod), C.uint32_t(layer), C.uint32_t(col), C.uint32_t(row))
+	if info.valid == 0 {
+		return nil, fmt.Errorf("tron_get_tile_image_info failed for %d/%d/%d/%d (TRON error %d)", lod, layer, col, row, int32(C.tron_last_error()))
+	}
+	data, err := copyTRONData(uint64(info.length), func(out unsafe.Pointer) uint64 {
+		return uint64(C.tron_tile_data(C.uintptr_t(reader), C.uint32_t(lod), C.uint32_t(layer), C.uint32_t(col), C.uint32_t(row), out))
 	})
+	if err != nil {
+		return nil, err
+	}
+	return encodeTRONImage(data, uint64(info.width), uint64(info.height))
 }
 
 func (platformRuntime) readNamed(reader uintptr, name string) ([]byte, error) {
@@ -174,5 +215,9 @@ func (platformRuntime) readNamed(reader uintptr, name string) ([]byte, error) {
 	if info.valid == 0 {
 		return nil, fmt.Errorf("TRON named image %q is not available (TRON error %d)", name, int32(C.tron_last_error()))
 	}
-	return copyTRONData(uint64(info.length), func(out unsafe.Pointer) uint64 { return uint64(C.tron_named_data(C.uintptr_t(reader), cname, out)) })
+	data, err := copyTRONData(uint64(info.length), func(out unsafe.Pointer) uint64 { return uint64(C.tron_named_data(C.uintptr_t(reader), cname, out)) })
+	if err != nil {
+		return nil, err
+	}
+	return encodeTRONImage(data, uint64(info.width), uint64(info.height))
 }

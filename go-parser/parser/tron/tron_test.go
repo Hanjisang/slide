@@ -21,9 +21,9 @@ type fakeRuntime struct {
 func (f *fakeRuntime) open(string) (uintptr, error) { return 1, nil }
 func (f *fakeRuntime) close(uintptr)                { f.closed++ }
 func (f *fakeRuntime) metadata(uintptr) (metadata, error) {
-	return metadata{width: 1024, height: 512, tileWidth: 256, tileHeight: 256, lodMin: 0, lodMax: 2, layerIndex: 3, mppX: .25, maxImageBytes: 16}, nil
+	return metadata{width: 1024, height: 512, tileWidth: 256, tileHeight: 256, lodMin: 0, lodMax: 2, layerIndex: 3, mppX: .25}, nil
 }
-func (f *fakeRuntime) readTile(_ uintptr, layer, lod, col, row uint32, _ uint64) ([]byte, error) {
+func (f *fakeRuntime) readTile(_ uintptr, lod, layer, col, row uint32) ([]byte, error) {
 	f.layer, f.lod, f.col, f.row = layer, lod, col, row
 	return []byte("tile"), nil
 }

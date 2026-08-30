@@ -1,67 +1,42 @@
-//go:build linux && cgo
+//go:build linux
 
 package hwp
 
-/*
-#cgo LDFLAGS: -ldl
-#include <dlfcn.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-
-typedef struct { uint32_t x, y, width, height; void *data; uint32_t dataLen; } hwp_image_info;
-typedef struct { uint32_t tileWidth, tileHeight, imageWidth, imageHeight; float scanRatio; uint8_t downsamplingMode; float downsamplingRatio; float mpp; } hwp_config;
-typedef void *(*get_reader_fn)(const char *);
-typedef void (*destroy_reader_fn)(void *);
-typedef int32_t (*read_named_fn)(void *, hwp_image_info *);
-typedef int32_t (*read_config_fn)(void *, hwp_config *);
-typedef int32_t (*read_img_fn)(void *, uint32_t, uint32_t, float, hwp_image_info *);
-typedef void (*destroy_image_fn)(hwp_image_info *);
-
-typedef struct { void *lib; get_reader_fn get; destroy_reader_fn destroy; read_named_fn preview, label, thumb; read_config_fn config; read_img_fn img; destroy_image_fn destroy_image; } hwp_api;
-static hwp_api api;
-static int api_loaded;
-
-static int hwp_load(const char *path) {
-  if (api_loaded) return 0;
-  memset(&api, 0, sizeof(api));
-  api.lib = dlopen(path, RTLD_NOW | RTLD_LOCAL);
-  if (!api.lib) return -1;
-  api.get = (get_reader_fn)dlsym(api.lib, "GetHwpReader");
-  api.destroy = (destroy_reader_fn)dlsym(api.lib, "DestroyHwpReader");
-  api.preview = (read_named_fn)dlsym(api.lib, "HwpReadPreview");
-  api.label = (read_named_fn)dlsym(api.lib, "HwpReadLabel");
-  api.thumb = (read_named_fn)dlsym(api.lib, "HwpReadThumb");
-  api.config = (read_config_fn)dlsym(api.lib, "HwpReadConfig");
-  api.img = (read_img_fn)dlsym(api.lib, "HwpReadImg");
-  api.destroy_image = (destroy_image_fn)dlsym(api.lib, "HwpDestroyImage");
-  if (!api.get || !api.destroy || !api.preview || !api.label || !api.thumb || !api.config || !api.img || !api.destroy_image) {
-    dlclose(api.lib); memset(&api, 0, sizeof(api)); return -2;
-  }
-  api_loaded = 1;
-  return 0;
-}
-static const char *hwp_error(void) { const char *e = dlerror(); return e ? e : "unknown dlopen/dlsym error"; }
-static uintptr_t hwp_open_reader(const char *sdk, const char *file) { if (hwp_load(sdk) != 0) return 0; return (uintptr_t)api.get(file); }
-static void hwp_close_reader(uintptr_t p) { if (p) api.destroy((void *)p); }
-static int32_t hwp_config_read(uintptr_t p, hwp_config *out) { return api.config((void *)p, out); }
-static int32_t hwp_read_image(uintptr_t p, uint32_t x, uint32_t y, float scale, hwp_image_info *out) { memset(out, 0, sizeof(*out)); return api.img((void *)p, x, y, scale, out); }
-static int32_t hwp_read_named(uintptr_t p, int kind, hwp_image_info *out) { memset(out, 0, sizeof(*out)); read_named_fn fn = kind == 0 ? api.preview : (kind == 1 ? api.label : api.thumb); return fn((void *)p, out); }
-static void hwp_image_free(hwp_image_info *img) { if (img && img->data) api.destroy_image(img); }
-*/
-import "C"
-
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"io"
+	"math"
 	"os"
+	"os/exec"
 	"sync"
-	"unsafe"
+	"time"
 )
 
-const maxSDKImageBytes = 64 << 20
+const (
+	maxSDKImageBytes = 64 << 20
+	configHeaderSize = 44
+	frameRecordSize  = 28
+	imageHeaderSize  = 28
+)
 
-var hwpSDKMu sync.Mutex
+type helperProcess struct {
+	cmd    *exec.Cmd
+	stdin  io.WriteCloser
+	stdout io.ReadCloser
+	config config
+	mu     sync.Mutex
+}
+
+var helperRegistry = struct {
+	sync.Mutex
+	next    uintptr
+	readers map[uintptr]*helperProcess
+}{next: 1, readers: make(map[uintptr]*helperProcess)}
 
 type platformRuntime struct{}
 
@@ -77,64 +52,240 @@ func hwpSDKPath() string {
 	return "/opt/vendor-libs/hwp/libhwp_sdk.so"
 }
 
-func (platformRuntime) open(file string) (uintptr, error) {
-	hwpSDKMu.Lock()
-	defer hwpSDKMu.Unlock()
-	sdk := C.CString(hwpSDKPath())
-	defer C.free(unsafe.Pointer(sdk))
-	name := C.CString(file)
-	defer C.free(unsafe.Pointer(name))
-	reader := C.hwp_open_reader(sdk, name)
-	if reader == 0 {
-		return 0, fmt.Errorf("load %s or open slide failed: %s", hwpSDKPath(), C.GoString(C.hwp_error()))
+func hwpHelperPath() string {
+	if path := os.Getenv("HWP_HELPER_PATH"); path != "" {
+		return path
 	}
-	return uintptr(reader), nil
+	return "/usr/local/bin/hwp-helper"
+}
+
+func readProtocolError(reader io.Reader, length uint32) error {
+	if length == 0 {
+		return nil
+	}
+	if length > 4096 {
+		return fmt.Errorf("HWP helper returned an oversized error message (%d bytes)", length)
+	}
+	message := make([]byte, length)
+	if _, err := io.ReadFull(reader, message); err != nil {
+		return fmt.Errorf("read HWP helper error: %w", err)
+	}
+	return errors.New(string(message))
+}
+
+func stopHelper(process *helperProcess) {
+	if process == nil || process.cmd == nil || process.cmd.Process == nil {
+		return
+	}
+	_ = process.stdin.Close()
+	done := make(chan error, 1)
+	go func() { done <- process.cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		_ = process.cmd.Process.Kill()
+		<-done
+	}
+}
+
+func (platformRuntime) open(file string) (uintptr, error) {
+	cmd := exec.Command(hwpHelperPath(), hwpSDKPath(), file)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return 0, fmt.Errorf("HWP helper stdin: %w", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return 0, fmt.Errorf("HWP helper stdout: %w", err)
+	}
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		return 0, fmt.Errorf("start %s: %w", hwpHelperPath(), err)
+	}
+	process := &helperProcess{cmd: cmd, stdin: stdin, stdout: stdout}
+	header := make([]byte, configHeaderSize)
+	if _, err := io.ReadFull(stdout, header); err != nil {
+		stopHelper(process)
+		return 0, fmt.Errorf("HWP helper exited during open: %w", err)
+	}
+	if string(header[:4]) != "HWPC" {
+		stopHelper(process)
+		return 0, fmt.Errorf("invalid HWP helper config response %q", header[:4])
+	}
+	status := int32(binary.LittleEndian.Uint32(header[4:8]))
+	frameCount := binary.LittleEndian.Uint32(header[36:40])
+	protocolErr := readProtocolError(stdout, binary.LittleEndian.Uint32(header[40:44]))
+	if status != 0 || protocolErr != nil {
+		stopHelper(process)
+		if protocolErr != nil {
+			return 0, protocolErr
+		}
+		return 0, fmt.Errorf("HWP helper open returned %d", status)
+	}
+	process.config = config{
+		tileWidth:   binary.LittleEndian.Uint32(header[8:12]),
+		tileHeight:  binary.LittleEndian.Uint32(header[12:16]),
+		imageWidth:  binary.LittleEndian.Uint32(header[16:20]),
+		imageHeight: binary.LittleEndian.Uint32(header[20:24]),
+		scanRatio:   math.Float32frombits(binary.LittleEndian.Uint32(header[24:28])),
+		downsample:  math.Float32frombits(binary.LittleEndian.Uint32(header[28:32])),
+		mpp:         math.Float32frombits(binary.LittleEndian.Uint32(header[32:36])),
+	}
+	if frameCount == 0 || frameCount > 32 {
+		stopHelper(process)
+		return 0, fmt.Errorf("invalid HWP helper frame count: %d", frameCount)
+	}
+	for index := uint32(0); index < frameCount; index++ {
+		record := make([]byte, frameRecordSize)
+		if _, err := io.ReadFull(stdout, record); err != nil {
+			stopHelper(process)
+			return 0, fmt.Errorf("read HWP helper frame %d: %w", index, err)
+		}
+		level := hwpLevel{
+			ratio:   math.Float32frombits(binary.LittleEndian.Uint32(record[0:4])),
+			width:   binary.LittleEndian.Uint32(record[4:8]),
+			height:  binary.LittleEndian.Uint32(record[8:12]),
+			originX: binary.LittleEndian.Uint32(record[12:16]),
+			originY: binary.LittleEndian.Uint32(record[16:20]),
+		}
+		if level.width == 0 || level.height == 0 || level.ratio <= 0 || math.IsNaN(float64(level.ratio)) || math.IsInf(float64(level.ratio), 0) {
+			stopHelper(process)
+			return 0, fmt.Errorf("invalid HWP helper frame %d", index)
+		}
+		process.config.levels = append(process.config.levels, level)
+	}
+
+	helperRegistry.Lock()
+	handle := helperRegistry.next
+	helperRegistry.next++
+	helperRegistry.readers[handle] = process
+	helperRegistry.Unlock()
+	return handle, nil
+}
+
+func takeHelper(reader uintptr) *helperProcess {
+	helperRegistry.Lock()
+	defer helperRegistry.Unlock()
+	process := helperRegistry.readers[reader]
+	delete(helperRegistry.readers, reader)
+	return process
+}
+
+func findHelper(reader uintptr) (*helperProcess, error) {
+	helperRegistry.Lock()
+	defer helperRegistry.Unlock()
+	process := helperRegistry.readers[reader]
+	if process == nil {
+		return nil, errors.New("HWP helper reader is closed")
+	}
+	return process, nil
 }
 
 func (platformRuntime) close(reader uintptr) {
-	hwpSDKMu.Lock()
-	defer hwpSDKMu.Unlock()
-	C.hwp_close_reader(C.uintptr_t(reader))
+	process := takeHelper(reader)
+	if process == nil {
+		return
+	}
+	process.mu.Lock()
+	request := make([]byte, 16)
+	binary.LittleEndian.PutUint32(request[:4], 5)
+	_, _ = process.stdin.Write(request)
+	process.mu.Unlock()
+	stopHelper(process)
 }
 
 func (platformRuntime) config(reader uintptr) (config, error) {
-	hwpSDKMu.Lock()
-	defer hwpSDKMu.Unlock()
-	var value C.hwp_config
-	if rc := C.hwp_config_read(C.uintptr_t(reader), &value); rc != 0 {
-		return config{}, fmt.Errorf("HwpReadConfig returned %d", int32(rc))
+	process, err := findHelper(reader)
+	if err != nil {
+		return config{}, err
 	}
-	return config{tileWidth: uint32(value.tileWidth), tileHeight: uint32(value.tileHeight), imageWidth: uint32(value.imageWidth), imageHeight: uint32(value.imageHeight), scanRatio: float32(value.scanRatio), downsample: float32(value.downsamplingRatio), mpp: float32(value.mpp)}, nil
+	return process.config, nil
 }
 
-func hwpImageBytes(image *C.hwp_image_info) ([]byte, uint32, uint32, error) {
-	defer C.hwp_image_free(image)
-	length := uint64(image.dataLen)
-	if image.data == nil || length == 0 {
+func helperImage(reader uintptr, operation, x, y uint32, scale float32) ([]byte, uint32, uint32, error) {
+	process, err := findHelper(reader)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	process.mu.Lock()
+	defer process.mu.Unlock()
+	request := make([]byte, 16)
+	binary.LittleEndian.PutUint32(request[0:4], operation)
+	binary.LittleEndian.PutUint32(request[4:8], x)
+	binary.LittleEndian.PutUint32(request[8:12], y)
+	binary.LittleEndian.PutUint32(request[12:16], math.Float32bits(scale))
+	if _, err := process.stdin.Write(request); err != nil {
+		return nil, 0, 0, fmt.Errorf("write HWP helper request: %w", err)
+	}
+	header := make([]byte, imageHeaderSize)
+	if _, err := io.ReadFull(process.stdout, header); err != nil {
+		return nil, 0, 0, fmt.Errorf("HWP helper exited during image read: %w", err)
+	}
+	if string(header[:4]) != "HWPI" {
+		return nil, 0, 0, fmt.Errorf("invalid HWP helper image response %q", header[:4])
+	}
+	status := int32(binary.LittleEndian.Uint32(header[4:8]))
+	width := binary.LittleEndian.Uint32(header[8:12])
+	height := binary.LittleEndian.Uint32(header[12:16])
+	length := binary.LittleEndian.Uint64(header[16:24])
+	protocolErr := readProtocolError(process.stdout, binary.LittleEndian.Uint32(header[24:28]))
+	if status != 0 || protocolErr != nil {
+		if protocolErr != nil {
+			return nil, 0, 0, protocolErr
+		}
+		return nil, 0, 0, fmt.Errorf("HWP helper image returned %d", status)
+	}
+	if length == 0 {
 		return nil, 0, 0, errors.New("HWP SDK returned an empty image")
 	}
 	if length > maxSDKImageBytes {
 		return nil, 0, 0, fmt.Errorf("HWP SDK image exceeds %d-byte safety limit", maxSDKImageBytes)
 	}
-	return C.GoBytes(image.data, C.int(length)), uint32(image.width), uint32(image.height), nil
+	data := make([]byte, int(length))
+	if _, err := io.ReadFull(process.stdout, data); err != nil {
+		return nil, 0, 0, fmt.Errorf("read HWP helper image: %w", err)
+	}
+	data, err = normalizeHWPImage(data, width, height)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return data, width, height, nil
+}
+
+func normalizeHWPImage(data []byte, width, height uint32) ([]byte, error) {
+	pixels := uint64(width) * uint64(height)
+	channels := uint64(0)
+	if pixels > 0 && uint64(len(data)) == pixels*3 {
+		channels = 3
+	} else if pixels > 0 && uint64(len(data)) == pixels*4 {
+		channels = 4
+	} else {
+		return data, nil
+	}
+	img := image.NewRGBA(image.Rect(0, 0, int(width), int(height)))
+	for source, target := 0, 0; source < len(data); source, target = source+int(channels), target+4 {
+		img.Pix[target] = data[source]
+		img.Pix[target+1] = data[source+1]
+		img.Pix[target+2] = data[source+2]
+		img.Pix[target+3] = 0xff
+	}
+	var output bytes.Buffer
+	if err := jpeg.Encode(&output, img, &jpeg.Options{Quality: 92}); err != nil {
+		return nil, fmt.Errorf("encode HWP SDK image: %w", err)
+	}
+	return output.Bytes(), nil
 }
 
 func (platformRuntime) readImage(reader uintptr, x, y uint32, scale float32) ([]byte, uint32, uint32, error) {
-	hwpSDKMu.Lock()
-	defer hwpSDKMu.Unlock()
-	var image C.hwp_image_info
-	if rc := C.hwp_read_image(C.uintptr_t(reader), C.uint32_t(x), C.uint32_t(y), C.float(scale), &image); rc != 0 {
-		return nil, 0, 0, fmt.Errorf("HwpReadImg returned %d", int32(rc))
-	}
-	return hwpImageBytes(&image)
+	return helperImage(reader, 1, x, y, scale)
 }
 
 func (platformRuntime) readNamed(reader uintptr, kind int) ([]byte, uint32, uint32, error) {
-	hwpSDKMu.Lock()
-	defer hwpSDKMu.Unlock()
-	var image C.hwp_image_info
-	if rc := C.hwp_read_named(C.uintptr_t(reader), C.int(kind), &image); rc != 0 {
-		return nil, 0, 0, fmt.Errorf("HWP named image read returned %d", int32(rc))
+	if kind < imagePreview || kind > imageThumb {
+		return nil, 0, 0, errors.New("invalid HWP named-image kind")
 	}
-	return hwpImageBytes(&image)
+	return helperImage(reader, uint32(kind+2), 0, 0, 0)
 }
