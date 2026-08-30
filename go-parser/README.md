@@ -9,7 +9,8 @@
 | KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
 | CSP | Go Native | `TEST_DATA_REQUIRED` | 基于公开 OpenCsp 格式实现分段读取、金字塔/附件索引和安全边界，尚未人工真实切片验收 |
-| HWP / TRON | Vendor SDK Runtime | `TEST_DATA_REQUIRED` | adapter 已实现，SDK 运行时动态加载；尚未人工真实切片验收 |
+| HWP | Vendor SDK + native helper | `AVAILABLE` | 当前 SDK 的兼容真实样本已完成 7 层 metadata、附件、Tile 和浏览器人工复验 |
+| TRON | Vendor SDK Runtime | `TEST_DATA_REQUIRED` | adapter 已实现，SDK 运行时动态加载；尚未人工真实切片验收 |
 
 SVS 不由本服务处理，继续由 Python Worker 的 OpenSlideAdapter 解析。
 
@@ -59,11 +60,11 @@ docker run --rm -p 8100:8100 \
   medical-go-parser:0.3.0
 ```
 
-每个 ID 目录放一个待解析文件，例如 `/data/slides/42/example.kfb`，然后调用 `POST /api/slides/42/analyze`。
+每个 ID 目录放一个待解析文件，例如 `/data/slides/42/example.kfb`，然后调用 `POST /api/slides/42/analyze`。HWP 在 Compose 中通过隔离 sidecar 和原生 helper 调用 SDK，避免 SDK 故障导致 Go parser 退出。
 
 ## 厂家 SDK
 
-`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交。HWP/TRON adapter 通过 `dlopen` 加载 `HWP_SDK_PATH`、`TRON_SDK_PATH`，镜像和仓库不包含 `.so`、`.dll` 或厂家头文件；SDK 缺失只会让对应文件初始化失败。CSP 为纯 Go，不需要厂家 SDK。OpenCsp 来源与许可见仓库根目录 `THIRD_PARTY_NOTICES.md`。
+`vendor-libs/` 与本地 `vendor-libs-local/` 均不得提交。HWP 原生 helper 与 TRON runtime adapter 分别动态加载 `HWP_SDK_PATH`、`TRON_SDK_PATH`；镜像和仓库不包含 `.so`、`.dll` 或厂家头文件，SDK 缺失只会让对应文件初始化失败。CSP 为纯 Go，不需要厂家 SDK。OpenCsp 来源与许可见仓库根目录 `THIRD_PARTY_NOTICES.md`。
 
 ## 测试数据
 

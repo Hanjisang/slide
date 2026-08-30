@@ -1,6 +1,6 @@
 # 实施进度
 
-更新时间：2026-08-29
+更新时间：2026-08-30
 
 ## v0.3.0 多格式真实切片验收
 
@@ -12,7 +12,7 @@
 - 修复 SVS Worker metadata 缺少 `READY` 协议字段、MDSX 坐标轴校验，以及前端混合层级顺序/512 tileSize 处理。
 - KFB/TMAP/MDSX/ZYP 已从 `TEST_DATA_REQUIRED` 升级为 `AVAILABLE`。
 - FINAL 开发收口：CSP 纯 Go 分段读取 parser、HWP/TRON 动态 SDK adapter、缓存原生句柄释放和 glibc 容器集成已完成。
-- CSP/HWP/TRON 只完成开发与基础自动化测试，未执行人工真实切片验收，状态统一为 `TEST_DATA_REQUIRED`。
+- HWP 已完成兼容真实切片的 metadata、附件、7 层 Tile 和浏览器人工复验，状态升级为 `AVAILABLE`；CSP/TRON 仍为 `TEST_DATA_REQUIRED`。
 
 ## P36 主要结果
 
@@ -26,7 +26,7 @@
 | FENLAN | 1 | 3308×2847 / 2 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | ZYP | 1 | 32768×31232 / 10 | 7/7 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
 | SDPC | 1 | 83328×91392 / 8 | 9/9 | 20/20 | 5/5, 10/10 | 100/100 | `AVAILABLE` |
-| HWP | 2 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
+| HWP | 1/2 compatible | 52053×11520 / 7 | 23/23 | 用户复验通过 | 已完成本地链路复验 | 浏览器通过 | `AVAILABLE` |
 | TRON | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
 | CSP | 1 | parser developed; manual run pending | — | — | — | — | `TEST_DATA_REQUIRED` |
 
@@ -45,7 +45,8 @@ v0.2 的多存储目标、真实归档/备份、文件版本、RBAC、数据质�
 
 ## 后续依赖
 
-- HWP/TRON：adapter 已按本地 Linux SDK 导出 ABI 实现；下一步只做人工真实切片的 metadata、附件、层级/坐标和稳定性验收，验收前不能标为 `AVAILABLE`。
+- HWP：当前本地 Linux SDK 的兼容真实样本已验收通过；状态绑定该 SDK/ABI，另一份生成测试件仍不兼容。
+- TRON：adapter 已按本地 Linux SDK 导出 ABI 实现；下一步做人工真实切片的 metadata、附件、层级/坐标和稳定性验收，验收前不能标为 `AVAILABLE`。
 - CSP：纯 Go parser 已基于公开 OpenCsp 格式完成；下一步做人工真实切片验收，验收前不能标为 `AVAILABLE`。
 - SDPC：可优化为常驻解码进程或批处理，降低 FFmpeg 子进程启动开销。
 - 正式卫健委接口、SQL Server/Oracle/PostgreSQL/达梦仍需目标协议、证书、驱动和联调环境。

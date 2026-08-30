@@ -77,7 +77,7 @@ def test_go_parser_client_uses_selected_environment(monkeypatch):
 def test_go_parser_adapter_uses_injected_client(tmp_path: Path):
     class FakeClient:
         def formats(self):
-            return {"HWP": {"format": "HWP", "status": "TEST_DATA_REQUIRED", "build": True}}
+            return {"HWP": {"format": "HWP", "status": "AVAILABLE", "build": True}}
 
         def analyze(self, slide_id: int):
             return {"status": "READY", "slideId": slide_id}

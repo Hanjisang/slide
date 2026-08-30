@@ -65,7 +65,7 @@ func New() *Registry {
 		{Capability: availableNative("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
 		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
 		{Capability: testDataRequired("CSP", "GO_NATIVE", ".csp"), newParser: csp.New},
-		{Capability: testDataRequired("HWP", "VENDOR_SDK_RUNTIME", ".hwp"), newParser: hwp.New},
+		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK_HELPER", Status: StatusAvailable, Extensions: []string{".hwp"}, Build: true, Tested: true, SourceIncluded: true}, newParser: hwp.New},
 		{Capability: testDataRequired("TRON", "VENDOR_SDK_RUNTIME", ".tron"), newParser: tron.New},
 	}
 	r := &Registry{byExtension: make(map[string]entry, len(entries))}
