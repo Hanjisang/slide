@@ -58,7 +58,7 @@ public class CollectionService {
         long logId = jdbc.queryForObject("SELECT LAST_INSERT_ID()", Long.class);
         int success = 0, failed = 0;
         String error = null;
-        LocalDateTime watermark = task.get("last_sync_time") instanceof Timestamp ts ? ts.toLocalDateTime() : LocalDateTime.of(1970,1,1,0,0);
+        LocalDateTime watermark = asLocalDateTime(task.get("last_sync_time"), LocalDateTime.of(1970,1,1,0,0));
         LocalDateTime maxWatermark = watermark;
         try (Connection connection = DriverManager.getConnection(String.valueOf(source.get("jdbc_url")), String.valueOf(source.get("username")),
                 cipher.decrypt(source.get("password_encrypted") == null ? null : String.valueOf(source.get("password_encrypted"))));
@@ -80,7 +80,8 @@ public class CollectionService {
                         error = rowError.getMessage();
                     }
                     Object marker = row.get(String.valueOf(task.get("incremental_field")).toLowerCase(Locale.ROOT));
-                    if (marker instanceof Timestamp ts && ts.toLocalDateTime().isAfter(maxWatermark)) maxWatermark = ts.toLocalDateTime();
+                    LocalDateTime markerTime = asLocalDateTime(marker, null);
+                    if (markerTime != null && markerTime.isAfter(maxWatermark)) maxWatermark = markerTime;
                 }
             }
             LocalDateTime nextRun = LocalDateTime.now().plusSeconds(parseInterval(String.valueOf(task.get("execution_expression"))));
@@ -114,6 +115,17 @@ public class CollectionService {
         List<Map<String, Object>> rows = jdbc.queryForList(sql, id);
         if (rows.isEmpty()) throw new BizException(message);
         return rows.getFirst();
+    }
+
+    static LocalDateTime asLocalDateTime(Object value, LocalDateTime fallback) {
+        if (value instanceof LocalDateTime dateTime) return dateTime;
+        if (value instanceof Timestamp timestamp) return timestamp.toLocalDateTime();
+        if (value instanceof java.util.Date date) return LocalDateTime.ofInstant(date.toInstant(), java.time.ZoneId.systemDefault());
+        if (value != null) {
+            try { return Timestamp.valueOf(String.valueOf(value)).toLocalDateTime(); }
+            catch (IllegalArgumentException ignored) { /* use fallback */ }
+        }
+        return fallback;
     }
 
     private boolean truthy(Object value) { return value instanceof Boolean b ? b : value instanceof Number n && n.intValue() != 0; }

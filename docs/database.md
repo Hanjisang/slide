@@ -14,7 +14,7 @@
 - 上报：`report_template`、`report_plan`、`report_batch`、`report_record`
 - 告警：`alert_rule`、`alert_event`
 
-患者等来源数据使用 `(source_system, source_id)` 唯一键实现幂等去重。切片状态为 `UPLOADING/UPLOADED/PARSING/READY/FAILED/ARCHIVED`，上报状态为 `PENDING/GENERATING/READY/REPORTING/SUCCESS/FAILED`。
+患者等来源数据使用 `(source_system, source_id)` 唯一键实现幂等去重。切片状态为 `UPLOADING/UPLOADED/PARSING/READY/FAILED/ARCHIVED/METADATA_ONLY`；`METADATA_ONLY` 表示只有业务记录、没有实际切片文件，不允许阅片、下载、解析或归档。上报状态为 `PENDING/GENERATING/READY/REPORTING/SUCCESS/FAILED`。
 
 Mock 表：`mock_his_patient`、`mock_his_visit`、`mock_emr_diagnosis`、`mock_lis_result`。
 
