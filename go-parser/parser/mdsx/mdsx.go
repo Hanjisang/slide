@@ -332,15 +332,15 @@ func (md *mdsx) GetImage(layer, line, row int, w io.Writer) error {
 		return fmt.Errorf("invalid MDSX tile coordinate")
 	}
 	layerInfo := md.LayerInfos[realLayer]
-	if line >= layerInfo.RowsNum || row >= layerInfo.ColsNum {
-		return fmt.Errorf("MDSX tile coordinate out of range")
+	pos, err := mdsxTilePosition(layerInfo, line, row)
+	if err != nil {
+		return err
 	}
 	//fmt.Println(layerInfo, realLayer, layer)
 
 	//fmt.Println(fromCache.Head1.LayerInfos[5:])
 
 	//layerInfo := fromCache.Head1.LayerInfos[realLayer]
-	pos := layerInfo.StartKey + line + row*layerInfo.ColsNum
 	if pos < 0 || pos >= len(md.LittleImgInfos) {
 		return fmt.Errorf("MDSX tile index out of range")
 	}
@@ -348,6 +348,15 @@ func (md *mdsx) GetImage(layer, line, row int, w io.Writer) error {
 	info := md.LittleImgInfos[pos]
 	return md.Range2Writer(int64(info.Pos), int64(info.Size), w)
 	//return nil, nil
+}
+
+func mdsxTilePosition(layerInfo rc, line, row int) (int, error) {
+	// XML Rows is the vertical (y) count and Cols is the horizontal (x)
+	// count. The public parser API passes line=x and row=y.
+	if line < 0 || row < 0 || line >= layerInfo.ColsNum || row >= layerInfo.RowsNum {
+		return 0, fmt.Errorf("MDSX tile coordinate out of range")
+	}
+	return layerInfo.StartKey + line + row*layerInfo.ColsNum, nil
 }
 
 func (md *mdsx) GetLabelInfoPathFunc(w io.Writer) error {

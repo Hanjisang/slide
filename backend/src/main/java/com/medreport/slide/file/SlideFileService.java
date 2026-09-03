@@ -46,7 +46,7 @@ public class SlideFileService {
     }
 
     public List<Map<String, Object>> cases() {
-        return jdbc.queryForList("SELECT c.*,p.name patient_name FROM pathology_case c LEFT JOIN patient p ON p.id=c.patient_id ORDER BY c.id DESC");
+        return jdbc.queryForList("SELECT c.*,p.name patient_name FROM pathology_case c LEFT JOIN patient p ON p.id=c.patient_id ORDER BY c.id DESC LIMIT 1000");
     }
 
     public Map<String, Object> find(long id) {
@@ -68,6 +68,9 @@ public class SlideFileService {
 
     public DownloadFile download(long id) {
         Map<String, Object> slide = find(id);
+        if ("METADATA_ONLY".equals(String.valueOf(slide.get("status")))) {
+            throw new BizException("该切片仅登记元数据，未提供原始文件，无法下载");
+        }
         StorageTarget target = slide.get("storage_target_id") == null
                 ? targets.requireClass("HOT") : targets.find(((Number) slide.get("storage_target_id")).longValue());
         String objectKey = String.valueOf(slide.get("object_key"));

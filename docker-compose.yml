@@ -39,7 +39,9 @@ services:
       retries: 30
 
   go-parser:
-    build: ./go-parser
+    build:
+      context: ./go-parser
+      target: runtime
     environment:
       SLIDE_CACHE_DIR: /data/slides
       TRON_SDK_PATH: ${TRON_SDK_PATH:-/opt/vendor/tron/libtronc.so}
@@ -47,6 +49,40 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - slide_cache:/data/slides:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  go-parser-vendor:
+    build:
+      context: ./go-parser
+      target: vendor
+      additional_contexts:
+        vendor-libs: ./vendor-libs-local
+    # The vendor HWP library crashes while opening valid MEDIC slides under an
+    # unprivileged uid. Keep that ABI quirk inside this read-only sidecar.
+    user: "0:0"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    # libhwp_sdk writes scratch state relative to cwd and segfaults if cwd is
+    # read-only. Keep the root filesystem sealed and place cwd on tmpfs.
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    environment:
+      SLIDE_CACHE_DIR: /data/slides
+      HWP_SDK_PATH: /opt/vendor-libs/hwp/libhwp_sdk.so
+      TRON_SDK_PATH: /opt/vendor-libs/tron/libtronc.so
+      TZ: Asia/Shanghai
+    volumes:
+      - slide_cache:/data/slides:ro
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
       interval: 10s
@@ -61,6 +97,7 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
       SLIDE_CACHE_DIR: /data/slides
       GO_PARSER_URL: http://go-parser:8100
+      GO_PARSER_VENDOR_URL: http://go-parser-vendor:8100
     ports:
       - "8000:8000"
     volumes:
@@ -90,7 +127,7 @@ services:
       REPORT_DIR: /data/reports
       TZ: Asia/Shanghai
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT:-18080}:8080"
     volumes:
       - report_data:/data/reports
     depends_on:

@@ -96,19 +96,24 @@ docker compose down
 
 公开的小体积 SVS 测试文件可从 OpenSlide Test Data 使用，例如 `CMU-1-Small-Region.svs`。
 
+### 武汉市第一医院半年模拟数据
+
+本地服务健康启动后，双击 `deploy/seed-wuhan-first-hospital.bat` 可一次生成 2026-01-01 至 2026-08-30 的脱敏模拟数据：每天 300 条患者、就诊、诊断、检验、病理病例及切片元数据，共 72,600 条切片记录；检查、手术和用药按固定比例随机分布。数字切片状态为 `METADATA_ONLY`，仅用于列表、统计、质量和上报流程展示，不创建或伪造实际文件。
+
+脚本同时创建“武汉市第一医院模拟数据源”和 7 个默认停用的采集任务。直接进入业务页面即可查看结果；进入“数据源管理”手动执行任务，可演示最后一天的增量采集流程。脚本可安全重复执行。
+
 ## 切片格式支持
 
 | 格式 | Engine | 状态 | 说明 |
 |---|---|---|---|
 | SVS | OpenSlide | `AVAILABLE` | 真实 metadata、thumbnail、Tile 和浏览器验收 |
-| KFB / TMAP / MDSX / ZYP | Go Native | `TEST_DATA_REQUIRED` | 已构建和完成安全失败测试，缺真实厂商样本 |
-| DMETRIX / FENLAN | Go Native | `AVAILABLE` | 真实样本已完成 metadata、thumbnail、多层级/边缘 Tile 验证 |
+| KFB / TMAP / MDSX / DMETRIX / FENLAN / ZYP | Go Native | `AVAILABLE` | 真实样本已完成 metadata、附件、多层级/边缘/随机 Tile、并发和稳定性验证 |
 | SDPC | Go Native + FFmpeg | `AVAILABLE` | 真实 HEVC Annex-B Tile 已完成多层级、多坐标和边缘验证 |
-| CSP | Go CGO | `SDK_BUNDLED` | 原输入含 SDK，但无再分发许可，默认构建隔离 |
-| HWP | Go Runtime SDK + CGO adapter | `SDK_PRESENT` / `SDK_REQUIRED` | 已接入配置、预览、标签、缩略图和 Tile；缺真实样本 |
-| TRON | Go Runtime SDK | `SDK_PRESENT` / `SDK_REQUIRED` | Linux 符号探测已完成；缺头文件/ABI 和真实样本 |
+| CSP | Go Native | `AVAILABLE` | 真实样本已完成 10 层 metadata、thumbnail、Tile 和浏览器人工验收 |
+| HWP | Vendor SDK + native helper | `AVAILABLE` | 兼容真实样本已完成 7 层 metadata、附件、Tile 和浏览器人工复验 |
+| TRON | Vendor SDK Runtime | `AVAILABLE` | 当前本地 SDK 已完成 8 层 metadata、稀疏 Tile、thumbnail 和浏览器人工验收 |
 
-代码存在不等于 `AVAILABLE`。只有真实文件完成 metadata、thumbnail、多个层级/位置 Tile 和 OpenSeadragon 阅片后才会升级状态。
+代码存在不等于 `AVAILABLE`。HWP、TRON 已在当前本地 SDK 上完成真实切片验证，CSP 已通过纯 Go 路径完成真实切片验证；三者均已升级为 `AVAILABLE`。12 份匿名真实样本的证据见 [样本清单](docs/v0.3-real-sample-inventory.md) 和 [统一验收报告](docs/v0.3-real-slide-acceptance.md)。
 
 ## 当前限制
 
@@ -118,4 +123,4 @@ docker compose down
 - 不提供 MPI、FHIR/DICOM Server、病理 AI、消息队列和复杂工作流。
 - 大切片首次读取会下载到 Worker 持久缓存；Go Parser 只读共享缓存，并在进程内保存最多 128 个、TTL 30 分钟的 Parser 实例。
 
-升级既有数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.3 Parser 架构](docs/v0.3-parser-architecture.md)、[v0.3 验收](docs/v0.3-acceptance.md) 和 [当前进度](docs/progress.md)。
+升级既有数据时不清理卷，应用启动会执行幂等字段升级并保留历史 bucket/object key。更多信息见 [部署文档](docs/deployment.md)、[API 文档](docs/api.md)、[v0.3 Parser 架构](docs/v0.3-parser-architecture.md)、[v0.3 验收](docs/v0.3-acceptance.md)、[真实切片统一验收](docs/v0.3-real-slide-acceptance.md) 和 [当前进度](docs/progress.md)。

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"imageparser/types"
 )
 
 func TestHealthAndFormats(t *testing.T) {
@@ -49,7 +51,7 @@ func TestAnalyzeRejectsInvalidAndMissingSlideIDs(t *testing.T) {
 	}
 }
 
-func TestNormalizeTileProducesStable256JPEG(t *testing.T) {
+func TestNormalizeTilePreservesConfiguredTileSize(t *testing.T) {
 	input := image.NewRGBA(image.Rect(0, 0, 32, 16))
 	for y := 0; y < 16; y++ {
 		for x := 0; x < 32; x++ {
@@ -60,15 +62,29 @@ func TestNormalizeTileProducesStable256JPEG(t *testing.T) {
 	if err := jpeg.Encode(encoded, input, nil); err != nil {
 		t.Fatal(err)
 	}
-	result, err := normalizeImage(encoded.Bytes(), 256, true)
-	if err != nil {
-		t.Fatal(err)
+	for _, tileSize := range []int{256, 512} {
+		result, err := normalizeImage(encoded.Bytes(), tileSize, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded, err := jpeg.Decode(bytes.NewReader(result))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if decoded.Bounds().Dx() != tileSize || decoded.Bounds().Dy() != tileSize {
+			t.Fatalf("unexpected normalized dimensions for %d: %v", tileSize, decoded.Bounds())
+		}
 	}
-	decoded, err := jpeg.Decode(bytes.NewReader(result))
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestBrowserLevelsPreserveStoredPyramid(t *testing.T) {
+	header := types.NewHeaderInfo("slide.hwp", 0, 1, 512, 1024, 20, 2, 0, 0, 0, 256)
+	header.Levels = []types.PyramidLevel{
+		{Width: 256, Height: 128, Downsample: 4, TileSize: 256},
+		{Width: 1024, Height: 512, Downsample: 1, TileSize: 256},
 	}
-	if decoded.Bounds().Dx() != 256 || decoded.Bounds().Dy() != 256 {
-		t.Fatalf("unexpected normalized dimensions: %v", decoded.Bounds())
+	levels := browserLevels(header)
+	if len(levels) != 2 || levels[0]["width"] != 256 || levels[0]["downsample"] != float64(4) || levels[1]["width"] != 1024 {
+		t.Fatalf("unexpected stored pyramid: %+v", levels)
 	}
 }

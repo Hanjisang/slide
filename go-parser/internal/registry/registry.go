@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"imageparser/internal/vendorsdk"
+	"imageparser/parser/csp"
 	"imageparser/parser/dmetrix"
 	"imageparser/parser/fenlan"
 	"imageparser/parser/hwp"
@@ -18,6 +18,7 @@ import (
 	"imageparser/parser/mdsx"
 	"imageparser/parser/sdpc"
 	"imageparser/parser/tmap"
+	"imageparser/parser/tron"
 	"imageparser/parser/zyp"
 	"imageparser/types"
 	"imageparser/utils/streamer"
@@ -26,12 +27,10 @@ import (
 type Status string
 
 const (
-	StatusTestDataRequired Status = "TEST_DATA_REQUIRED"
-	StatusDecoderRequired  Status = "DECODER_REQUIRED"
-	StatusSDKBundled       Status = "SDK_BUNDLED"
-	StatusSDKRequired      Status = "SDK_REQUIRED"
-	StatusSDKPresent       Status = "SDK_PRESENT"
-	StatusFailed           Status = "FAILED"
+	StatusAvailable             Status = "AVAILABLE"
+	StatusTestDataRequired      Status = "TEST_DATA_REQUIRED"
+	StatusLicenseRequired       Status = "LICENSE_REQUIRED"
+	StatusCompatibilityRequired Status = "COMPATIBILITY_REQUIRED"
 )
 
 type Capability struct {
@@ -66,16 +65,16 @@ func New() *Registry {
 		hwpEntry.Build = true
 	}
 	entries := []entry{
-		{Capability: native("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
-		{Capability: native("TMAP", ".tmap"), newParser: tmap.New},
-		{Capability: native("MDSX", ".mdsx"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return mdsx.New(s) }},
+		{Capability: availableNative("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
+		{Capability: availableNative("TMAP", ".tmap"), newParser: tmap.New},
+		{Capability: availableNative("MDSX", ".mdsx"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return mdsx.New(s) }},
 		{Capability: availableNative("DMETRIX", ".dmetrix"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return dmetrix.New(s) }},
 		{Capability: availableNative("FENLAN", ".fenlan"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return fenlan.New(s) }},
-		{Capability: native("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
-		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
-		{Capability: Capability{Format: "CSP", Engine: "GO_CGO", Status: StatusSDKBundled, Extensions: []string{".csp"}, Build: false, Missing: "authorized libcsp_sdk.so in vendor-libs", SourceIncluded: false}},
-		hwpEntry,
-		{Capability: tron},
+		{Capability: availableNative("ZYP", ".zyp"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return zyp.New(s) }},
+		{Capability: Capability{Format: "SDPC", Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{".sdpc"}, Build: true, Tested: true, SourceIncluded: true}, newParser: func(s streamer.Streamer) (types.ImageParser, error) { return sdpc.New(s) }},
+		{Capability: availableNative("CSP", ".csp"), newParser: csp.New},
+		{Capability: Capability{Format: "HWP", Engine: "VENDOR_SDK_HELPER", Status: StatusAvailable, Extensions: []string{".hwp"}, Build: true, Tested: true, SourceIncluded: true}, newParser: hwp.New},
+		{Capability: Capability{Format: "TRON", Engine: "VENDOR_SDK_RUNTIME", Status: StatusAvailable, Extensions: []string{".tron"}, Build: true, Tested: true, SourceIncluded: true}, newParser: tron.New},
 	}
 	r := &Registry{byExtension: make(map[string]entry, len(entries))}
 	for _, item := range entries {
@@ -88,44 +87,12 @@ func New() *Registry {
 	return r
 }
 
-func hwpParser(s streamer.Streamer) (types.ImageParser, error) { return hwp.New(s) }
-
-func optionalSDK(format, extension, envName, fallback string, symbols []string) Capability {
-	path := os.Getenv(envName)
-	if path == "" {
-		path = fallback
-	}
-	capability := Capability{Format: format, Engine: "GO_RUNTIME_SDK", Status: StatusSDKRequired, Extensions: []string{extension}, Build: false, Missing: path, SourceIncluded: false}
-	resolved := path
-	for _, candidate := range []string{path, filepath.Join(filepath.Dir(path), formatToDir(format), filepath.Base(path)), filepath.Join(filepath.Dir(path), formatToDir(format), "linux", filepath.Base(path))} {
-		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-			resolved = candidate
-			break
-		}
-	}
-	if _, err := os.Stat(resolved); err != nil {
-		return capability
-	}
-	if err := vendorsdk.Probe(resolved, symbols); err != nil {
-		capability.Status = StatusFailed
-		capability.Missing = err.Error()
-		return capability
-	}
-	capability.Status = StatusSDKPresent
-	capability.Missing = "real vendor slide validation required"
-	return capability
-}
-
-func formatToDir(format string) string { return strings.ToLower(format) }
-
-func CGOEnabled() bool { return vendorsdk.Enabled() }
-
-func native(format, extension string) Capability {
-	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "real vendor slide for L3-L5 validation", SourceIncluded: true}
-}
-
 func availableNative(format, extension string) Capability {
-	return Capability{Format: format, Engine: "GO_NATIVE", Status: "AVAILABLE", Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
+	return Capability{Format: format, Engine: "GO_NATIVE", Status: StatusAvailable, Extensions: []string{extension}, Build: true, Tested: true, SourceIncluded: true}
+}
+
+func testDataRequired(format, engine, extension string) Capability {
+	return Capability{Format: format, Engine: engine, Status: StatusTestDataRequired, Extensions: []string{extension}, Build: true, Tested: false, Missing: "manual real-slide validation", SourceIncluded: true}
 }
 
 func (r *Registry) Formats() []Capability {
@@ -155,12 +122,20 @@ func (r *Registry) Open(path string) (parser types.ImageParser, capability Capab
 	}
 	header, err := parser.GetHeaderInfoFunc()
 	if err != nil {
+		closeParser(parser)
 		return nil, item.Capability, fmt.Errorf("%s metadata failed: %w", item.Format, err)
 	}
 	if err := validateHeader(header); err != nil {
+		closeParser(parser)
 		return nil, item.Capability, fmt.Errorf("%s invalid metadata: %w", item.Format, err)
 	}
 	return parser, item.Capability, nil
+}
+
+func closeParser(parser types.ImageParser) {
+	if closeable, ok := parser.(types.CloseableParser); ok {
+		_ = closeable.Close()
+	}
 }
 
 func validateHeader(header types.HeaderInfo) error {

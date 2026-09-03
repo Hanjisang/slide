@@ -36,4 +36,4 @@ mysql-data/
 
 /parser.zip
 /go-parser/vendor-libs/
-/vendor-libs-local/**
+/vendor-libs-local/

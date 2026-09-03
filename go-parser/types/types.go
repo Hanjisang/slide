@@ -13,18 +13,34 @@ type ImageParser interface {
 	GetMacrograph(w io.Writer) error
 }
 
+// CloseableParser is implemented by parsers that own native SDK handles.
+// The service cache closes these handles when an entry is replaced or evicted.
+type CloseableParser interface {
+	Close() error
+}
+
 type HeaderInfo struct {
-	FileName     string  `json:"fileName"`
-	MinLayer     int     `json:"minLayer"`
-	MaxLayer     int     `json:"maxLayer"`
-	Height       int     `json:"height"`
-	Width        int     `json:"width"`
-	KhiScanScale float32 `json:"scanScale"`
-	Downsample   float32 `json:"downsample"`
-	SpendTime    float32 `json:"spendTime"`
-	ScanTime     float64 `json:"scanTime"`
-	Mpp          float32 `json:"mpp"`
-	BlockSize    int     `json:"blockSize"`
+	FileName     string         `json:"fileName"`
+	MinLayer     int            `json:"minLayer"`
+	MaxLayer     int            `json:"maxLayer"`
+	Height       int            `json:"height"`
+	Width        int            `json:"width"`
+	KhiScanScale float32        `json:"scanScale"`
+	Downsample   float32        `json:"downsample"`
+	SpendTime    float32        `json:"spendTime"`
+	ScanTime     float64        `json:"scanTime"`
+	Mpp          float32        `json:"mpp"`
+	BlockSize    int            `json:"blockSize"`
+	Levels       []PyramidLevel `json:"levels,omitempty"`
+}
+
+// PyramidLevel describes a real stored level when a format does not use a
+// synthetic power-of-two pyramid.
+type PyramidLevel struct {
+	Width      int     `json:"width"`
+	Height     int     `json:"height"`
+	Downsample float64 `json:"downsample"`
+	TileSize   int     `json:"tileSize"`
 }
 
 func NewHeaderInfo(fileName string, minLayer, maxLayer, height, width int, scanScale, downsample, spendTime float32, scanTime float64, mpp float32, blockSize int) HeaderInfo {

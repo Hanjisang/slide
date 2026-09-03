@@ -6,14 +6,14 @@ import (
 	"testing"
 )
 
-func TestCapabilitiesDoNotClaimAvailabilityWithoutRealSlides(t *testing.T) {
+func TestCapabilitiesReflectRealSlideAcceptance(t *testing.T) {
 	formats := New().Formats()
 	if len(formats) != 10 {
 		t.Fatalf("expected 10 Go/vendor formats, got %d", len(formats))
 	}
 	for _, format := range formats {
-		if format.Status == "AVAILABLE" && format.Format != "DMETRIX" && format.Format != "FENLAN" && format.Format != "SDPC" {
-			t.Fatalf("%s must not be AVAILABLE without L5 evidence", format.Format)
+		if format.Status != StatusAvailable || !format.Tested || !format.Build {
+			t.Fatalf("%s must expose completed real-slide evidence", format.Format)
 		}
 	}
 }
@@ -33,14 +33,18 @@ func TestNativeParsersFailSafelyOnTruncatedData(t *testing.T) {
 	}
 }
 
-func TestOptionalSDKFormatsRemainIsolated(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "slide.hwp")
-	if err := os.WriteFile(path, []byte("not an hwp"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	_, capability, err := New().Open(path)
-	if err == nil || capability.Status != StatusSDKRequired {
-		t.Fatalf("expected isolated SDK_REQUIRED capability, got %q / %v", capability.Status, err)
+func TestAcceptedFinalFormatsStillFailSafelyOnInvalidInput(t *testing.T) {
+	for _, extension := range []string{".csp", ".hwp", ".tron"} {
+		t.Run(extension, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "slide"+extension)
+			if err := os.WriteFile(path, []byte("not a slide"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, capability, err := New().Open(path)
+			if err == nil || capability.Status != StatusAvailable {
+				t.Fatalf("expected accepted %s capability with a safe parse error, got %q / %v", extension, capability.Status, err)
+			}
+		})
 	}
 }
 

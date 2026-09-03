@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS patient (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, source_system VARCHAR(30) NOT NULL, source_id VARCHAR(100), patient_no VARCHAR(100), name VARCHAR(100),
   gender VARCHAR(10), birthday DATE, age INT, id_card VARCHAR(50), phone VARCHAR(50), quality_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_patient_source (source_system, source_id)
+  UNIQUE KEY uk_patient_source (source_system, source_id),
+  KEY idx_patient_no (patient_no)
 );
 CREATE TABLE IF NOT EXISTS visit (
   id BIGINT PRIMARY KEY AUTO_INCREMENT, source_system VARCHAR(30), source_id VARCHAR(100), patient_id BIGINT, visit_type VARCHAR(20), visit_no VARCHAR(100),

@@ -21,6 +21,8 @@ import (
 	"github.com/nfnt/resize"
 
 	"imageparser/internal/registry"
+	"imageparser/internal/vendorsdk"
+	"imageparser/types"
 )
 
 const maxImageOutput = 64 << 20
@@ -63,7 +65,7 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 			parserCount++
 		}
 	}
-	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": registry.CGOEnabled()})
+	s.writeJSON(w, http.StatusOK, map[string]any{"status": "UP", "parserCount": parserCount, "cgo": vendorsdk.Enabled()})
 }
 
 func (s *Server) formats(w http.ResponseWriter, _ *http.Request) {
@@ -84,20 +86,35 @@ func (s *Server) analyze(w http.ResponseWriter, r *http.Request) {
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
 	header := entry.header
-	levels := make([]map[string]any, 0, header.MaxLayer-header.MinLayer+1)
-	for browserLevel := 0; browserLevel <= header.MaxLayer-header.MinLayer; browserLevel++ {
-		downsample := math.Pow(2, float64(header.MaxLayer-header.MinLayer-browserLevel))
-		levels = append(levels, map[string]any{
-			"level": browserLevel, "width": max(1, int(math.Ceil(float64(header.Width)/downsample))),
-			"height": max(1, int(math.Ceil(float64(header.Height)/downsample))), "downsample": downsample,
-		})
-	}
+	levels := browserLevels(header)
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"status": "READY", "format": entry.capability.Format, "adapterType": "GO_PARSER",
-		"sdkStatus": string(entry.capability.Status), "width": header.Width, "height": header.Height,
+		"sdkStatus": entry.capability.Status, "width": header.Width, "height": header.Height,
 		"levelCount": len(levels), "levels": levels,
 		"properties": map[string]any{"engine": entry.capability.Engine, "sourceStatus": entry.capability.Status, "mpp": header.Mpp},
 	})
+}
+
+func browserLevels(header types.HeaderInfo) []map[string]any {
+	levels := make([]map[string]any, 0, header.MaxLayer-header.MinLayer+1)
+	if len(header.Levels) > 0 {
+		for browserLevel, level := range header.Levels {
+			levels = append(levels, map[string]any{
+				"level": browserLevel, "width": level.Width, "height": level.Height,
+				"downsample": level.Downsample, "tileSize": max(256, level.TileSize),
+			})
+		}
+	} else {
+		for browserLevel := 0; browserLevel <= header.MaxLayer-header.MinLayer; browserLevel++ {
+			downsample := math.Pow(2, float64(header.MaxLayer-header.MinLayer-browserLevel))
+			levels = append(levels, map[string]any{
+				"level": browserLevel, "width": max(1, int(math.Ceil(float64(header.Width)/downsample))),
+				"height": max(1, int(math.Ceil(float64(header.Height)/downsample))), "downsample": downsample,
+				"tileSize": max(256, header.BlockSize),
+			})
+		}
+	}
+	return levels
 }
 
 func (s *Server) image(kind string) http.HandlerFunc {
@@ -181,7 +198,7 @@ func (s *Server) tile(w http.ResponseWriter, r *http.Request) {
 		s.writeError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	data, err := normalizeImage(buffer.Bytes(), 256, true)
+	data, err := normalizeImage(buffer.Bytes(), max(256, entry.header.BlockSize), true)
 	if err != nil {
 		s.writeError(w, http.StatusUnprocessableEntity, err)
 		return

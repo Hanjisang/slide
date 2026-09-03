@@ -58,13 +58,15 @@ class OpenSlideAdapter(SlideAdapter):
     def get_metadata(self, file_path: str) -> dict[str, Any]:
         with openslide.OpenSlide(file_path) as slide:
             return {
+                "status": "READY",
+                "format": "SVS",
                 "adapterType": self.name,
                 "sdkStatus": self.sdk_status,
                 "width": slide.dimensions[0],
                 "height": slide.dimensions[1],
                 "levelCount": slide.level_count,
                 "levels": [
-                    {"level": index, "width": size[0], "height": size[1], "downsample": slide.level_downsamples[index]}
+                    {"level": index, "width": size[0], "height": size[1], "downsample": slide.level_downsamples[index], "tileSize": 256}
                     for index, size in enumerate(slide.level_dimensions)
                 ],
                 "properties": {key: value for key, value in slide.properties.items() if len(str(value)) < 500},
@@ -94,8 +96,8 @@ class OpenSlideAdapter(SlideAdapter):
 
 
 class GoParserClient:
-    def __init__(self) -> None:
-        self.base_url = os.getenv("GO_PARSER_URL", "http://go-parser:8100").rstrip("/")
+    def __init__(self, env_name: str = "GO_PARSER_URL", default_url: str = "http://go-parser:8100") -> None:
+        self.base_url = os.getenv(env_name, default_url).rstrip("/")
         self._formats: dict[str, dict[str, Any]] = {}
         self._loaded_at = 0.0
 
@@ -122,8 +124,14 @@ class GoParserClient:
 
     def analyze(self, slide_id: int) -> dict[str, Any]:
         response = httpx.post(f"{self.base_url}/api/slides/{slide_id}/analyze", timeout=30.0)
-        response.raise_for_status()
-        return response.json()
+        try:
+            result = response.json()
+        except ValueError:
+            response.raise_for_status()
+            raise RuntimeError("PARSER_RETURNED_INVALID_JSON")
+        if response.is_error and not isinstance(result, dict):
+            response.raise_for_status()
+        return result
 
     def image(self, slide_id: int, path: str, timeout: float) -> Image.Image:
         response = httpx.get(f"{self.base_url}/api/slides/{slide_id}/{path}", timeout=timeout)
@@ -132,20 +140,22 @@ class GoParserClient:
 
 
 GO_PARSER = GoParserClient()
+VENDOR_GO_PARSER = GoParserClient("GO_PARSER_VENDOR_URL", "http://go-parser-vendor:8100")
 
 
 class GoParserAdapter(SlideAdapter):
-    def __init__(self, name: str, extension: str):
+    def __init__(self, name: str, extension: str, client: GoParserClient = GO_PARSER):
         self.name = name
         self.extensions = {extension}
+        self.client = client
 
     @property
     def sdk_status(self) -> str:
-        capability = GO_PARSER.formats().get(self.name)
+        capability = self.client.formats().get(self.name)
         return capability.get("status", "PARSER_UNAVAILABLE") if capability else "PARSER_UNAVAILABLE"
 
     def capability(self) -> dict[str, Any]:
-        capability = GO_PARSER.formats().get(self.name)
+        capability = self.client.formats().get(self.name)
         if not capability:
             return {
                 "adapterType": self.name, "format": self.name, "engine": "GO_PARSER",
@@ -162,7 +172,7 @@ class GoParserAdapter(SlideAdapter):
         return Path(file_path).suffix.lower() in self.extensions
 
     def is_operational(self) -> bool:
-        capability = GO_PARSER.formats().get(self.name)
+        capability = self.client.formats().get(self.name)
         return bool(capability and capability.get("build"))
 
     @staticmethod
@@ -176,15 +186,15 @@ class GoParserAdapter(SlideAdapter):
         return slide_id
 
     def get_metadata(self, file_path: str) -> dict[str, Any]:
-        return GO_PARSER.analyze(self.slide_id(file_path))
+        return self.client.analyze(self.slide_id(file_path))
 
     def get_thumbnail(self, file_path: str, max_size: int = 512) -> Image.Image:
-        return GO_PARSER.image(self.slide_id(file_path), "thumbnail", 30.0)
+        return self.client.image(self.slide_id(file_path), "thumbnail", 30.0)
 
     def get_tile(self, file_path: str, level: int, x: int, y: int, tile_size: int = 256) -> Image.Image:
         if tile_size != 256:
             raise ValueError("GO_PARSER_TILE_SIZE_MUST_BE_256")
-        return GO_PARSER.image(self.slide_id(file_path), f"tiles/{level}/{x}/{y}", 15.0)
+        return self.client.image(self.slide_id(file_path), f"tiles/{level}/{x}/{y}", 15.0)
 
 
 class VendorAdapter(SlideAdapter):
@@ -200,13 +210,13 @@ ADAPTERS: list[SlideAdapter] = [
     OpenSlideAdapter(),
     GoParserAdapter("KFB", ".kfb"),
     GoParserAdapter("SDPC", ".sdpc"),
-    GoParserAdapter("TRON", ".tron"),
+    GoParserAdapter("TRON", ".tron", VENDOR_GO_PARSER),
     GoParserAdapter("MDSX", ".mdsx"),
     GoParserAdapter("TMAP", ".tmap"),
     GoParserAdapter("DMETRIX", ".dmetrix"),
     GoParserAdapter("FENLAN", ".fenlan"),
     GoParserAdapter("ZYP", ".zyp"),
-    GoParserAdapter("HWP", ".hwp"),
+    GoParserAdapter("HWP", ".hwp", VENDOR_GO_PARSER),
     GoParserAdapter("CSP", ".csp"),
 ]
 

@@ -90,6 +90,9 @@ public class SlideService implements ApplicationRunner {
 
     public Map<String, Object> analyze(long id) {
         Map<String, Object> slide = files.find(id);
+        if ("METADATA_ONLY".equals(String.valueOf(slide.get("status")))) {
+            throw new BizException("该切片仅登记元数据，未提供原始文件，无法执行解析");
+        }
         jdbc.update("UPDATE slide_file SET status='PARSING',error_message=NULL WHERE id=?", id);
         try {
             Map<String, Object> result = worker.analyze(id, String.valueOf(slide.get("bucket_name")),
