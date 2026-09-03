@@ -17,7 +17,6 @@ func TestCapabilitiesReflectRealSlideAcceptance(t *testing.T) {
 		}
 	}
 }
-
 func TestNativeParsersFailSafelyOnTruncatedData(t *testing.T) {
 	registry := New()
 	for _, extension := range []string{".kfb", ".tmap", ".mdsx", ".dmetrix", ".fenlan", ".zyp"} {
@@ -32,7 +31,6 @@ func TestNativeParsersFailSafelyOnTruncatedData(t *testing.T) {
 		})
 	}
 }
-
 func TestAcceptedFinalFormatsStillFailSafelyOnInvalidInput(t *testing.T) {
 	for _, extension := range []string{".csp", ".hwp", ".tron"} {
 		t.Run(extension, func(t *testing.T) {
@@ -48,10 +46,3 @@ func TestAcceptedFinalFormatsStillFailSafelyOnInvalidInput(t *testing.T) {
 	}
 }
 
-func TestOptionalSDKFormatsRemainBuildableWithoutLibraries(t *testing.T) {
-	for _, format := range New().Formats() {
-		if (format.Format == "HWP" || format.Format == "TRON") && format.Status == StatusSDKPresent {
-			t.Fatalf("%s unexpectedly claims SDK_PRESENT in a test environment without a checked-in SDK", format.Format)
-		}
-	}
-}

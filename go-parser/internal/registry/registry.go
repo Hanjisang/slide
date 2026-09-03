@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -57,13 +56,6 @@ type Registry struct {
 }
 
 func New() *Registry {
-	hwp := optionalSDK("HWP", ".hwp", "HWP_SDK_PATH", "/opt/vendor/hwp/libhwp_sdk.so", []string{"GetHwpReader", "DestroyHwpReader", "HwpReadPreview", "HwpReadLabel", "HwpReadThumb", "HwpReadConfig", "HwpReadImg"})
-	tron := optionalSDK("TRON", ".tron", "TRON_SDK_PATH", "/opt/vendor/tron/libtronc.so", []string{"tron_open", "tron_close", "tron_get_resolution", "tron_get_content_region", "tron_get_lod_level_range", "tron_get_tile_size", "tron_read_region", "tron_get_named_image_info", "tron_get_named_image_data"})
-	hwpEntry := entry{Capability: hwp}
-	if hwp.Status == StatusSDKPresent {
-		hwpEntry.newParser = hwpParser
-		hwpEntry.Build = true
-	}
 	entries := []entry{
 		{Capability: availableNative("KFB", ".kfb"), newParser: func(s streamer.Streamer) (types.ImageParser, error) { return kfb.New(s) }},
 		{Capability: availableNative("TMAP", ".tmap"), newParser: tmap.New},
