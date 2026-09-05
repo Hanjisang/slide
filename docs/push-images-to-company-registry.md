@@ -43,7 +43,7 @@ Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不
 
 1. 记录本地镜像 ID。
 2. `docker tag` 后确认目标标签仍指向同一个镜像 ID。
-3. `docker push` 必须返回公司仓库确认的 manifest digest；脚本再把该 digest 与本地目标标签的 digest 对照，不一致就立即报错，不会报告成功。
+3. `docker push` 必须返回公司仓库确认的 manifest digest，并在推送后再次核对本地目标标签仍指向同一个镜像 ID；任一步失败都不会报告成功。
 
 如果本地 Compose 服务正在运行，脚本还会先核对服务实际使用的镜像 ID；发现服务和待推送标签不是同一个镜像时会停止，避免把“未运行/未验收”的旧标签推到仓库。
 

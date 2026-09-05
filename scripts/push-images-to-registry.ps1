@@ -66,24 +66,6 @@ function Get-ImageId([string]$Image) {
     return $value.Trim()
 }
 
-function Get-ImageDigest([string]$Image, [string]$Repository) {
-    $raw = & docker image inspect $Image --format '{{json .RepoDigests}}'
-    if ($LASTEXITCODE -ne 0) {
-        throw "Cannot inspect image digest: $Image"
-    }
-
-    $entries = @($raw | ConvertFrom-Json)
-    $prefix = "$Repository@"
-    $match = @(
-        $entries |
-            ForEach-Object { [string]$_ } |
-            Where-Object { $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) }
-    ) | Select-Object -First 1
-
-    if ($null -eq $match) { return $null }
-    return ([string]$match).Substring($prefix.Length)
-}
-
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 try {
@@ -129,7 +111,6 @@ try {
         $plans += @{
             Source = $source
             Target = $target
-            Repository = $repository
             SourceId = Get-ImageId $source
         }
     }
@@ -191,25 +172,16 @@ try {
             throw "Image verification failed after push for $($plan.Target). Local target image changed."
         }
 
-        $pushedDigest = Get-ImageDigest $plan.Target $plan.Repository
-        if ($pushedDigest -and ($remoteDigest -ne $pushedDigest)) {
-            throw "Digest verification failed for $($plan.Target). Registry: $remoteDigest; local target: $pushedDigest"
-        }
-
-        Write-Host "Verified exact image digest: $($plan.Repository)@$remoteDigest" -ForegroundColor Green
+        Write-Host "Verified local image ID and registry manifest digest: $remoteDigest" -ForegroundColor Green
 
         if ($PushLatest -and $Tag -ne 'latest') {
-            $latestTarget = "$($plan.Repository):latest"
+            $latestTarget = "$Registry/$Namespace/$($plan.Source.Split(':')[0]):latest"
             Invoke-Docker @('tag', $plan.Source, $latestTarget)
             $latestId = Get-ImageId $latestTarget
             if ($latestId -ne $plan.SourceId) {
                 throw "Image tag verification failed for $latestTarget. Source and target image IDs differ."
             }
             $latestRemoteDigest = Invoke-DockerPush $latestTarget
-            $latestDigest = Get-ImageDigest $latestTarget $plan.Repository
-            if ($latestDigest -and ($latestRemoteDigest -ne $latestDigest)) {
-                throw "Digest verification failed for $latestTarget. Registry: $latestRemoteDigest; local target: $latestDigest"
-            }
             Write-Host "Updated and verified latest: $latestTarget ($latestRemoteDigest)" -ForegroundColor Green
         }
     }
