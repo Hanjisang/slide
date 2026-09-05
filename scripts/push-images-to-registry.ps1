@@ -90,23 +90,6 @@ try {
     & docker version *> $null
     if ($LASTEXITCODE -ne 0) { throw 'Docker Desktop is not running or the current user cannot access Docker.' }
 
-    Write-Step 'Checking registry connectivity (connect company VPN first)'
-    $endpoint = Get-RegistryEndpoint $Registry
-    $connection = Test-NetConnection -ComputerName $endpoint.Host -Port $endpoint.Port -WarningAction SilentlyContinue
-    if (-not $connection.TcpTestSucceeded) {
-        throw "Cannot connect to $Registry. Check company VPN and registry address, then run again.`n$(Get-RegistrySetupHint $Registry)"
-    }
-
-    if ($Login) {
-        Write-Step 'Logging in to registry'
-        Write-Host 'Docker will read the username and password interactively; credentials are not stored in this script.'
-        try {
-            Invoke-Docker @('login', $Registry)
-        } catch {
-            throw "$($_.Exception.Message)`n$(Get-RegistrySetupHint $Registry)"
-        }
-    }
-
     $images = @(
         @{ Name = 'medical-report-mvp-backend'; SourceTag = $SourceTag; Service = 'backend'; Kind = 'business'; Required = $true },
         @{ Name = 'medical-report-mvp-frontend'; SourceTag = $SourceTag; Service = 'frontend'; Kind = 'business'; Required = $true },
@@ -175,14 +158,33 @@ try {
     }
 
     Write-Step 'Images to push'
-    Write-Host "Business images: $(($plans | Where-Object { $_.Kind -eq 'business' }).Count)"
-    Write-Host "Runtime images:  $(($plans | Where-Object { $_.Kind -eq 'runtime' }).Count)"
+    $businessPlans = @($plans | Where-Object { $_.Kind -eq 'business' })
+    $runtimePlans = @($plans | Where-Object { $_.Kind -eq 'runtime' })
+    Write-Host "Business images: $($businessPlans.Count)"
+    Write-Host "Runtime images:  $($runtimePlans.Count)"
     Write-Host "Total images:    $($plans.Count)"
     $plans | ForEach-Object { Write-Host "  [$($_.Kind)] $($_.Source)  ->  $($_.Target)" }
     $answer = Read-Host 'Type YES to start pushing'
     if ($answer.Trim().ToUpperInvariant() -ne 'YES') {
         Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
         exit 0
+    }
+
+    Write-Step 'Checking registry connectivity (connect company VPN first)'
+    $endpoint = Get-RegistryEndpoint $Registry
+    $connection = Test-NetConnection -ComputerName $endpoint.Host -Port $endpoint.Port -WarningAction SilentlyContinue
+    if (-not $connection.TcpTestSucceeded) {
+        throw "Cannot connect to $Registry. Check company VPN and registry address, then run again.`n$(Get-RegistrySetupHint $Registry)"
+    }
+
+    if ($Login) {
+        Write-Step 'Logging in to registry'
+        Write-Host 'Docker will read the username and password interactively; credentials are not stored in this script.'
+        try {
+            Invoke-Docker @('login', $Registry)
+        } catch {
+            throw "$($_.Exception.Message)`n$(Get-RegistrySetupHint $Registry)"
+        }
     }
 
     Write-Step 'Tagging and pushing'
