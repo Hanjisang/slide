@@ -53,9 +53,12 @@ Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不
 
 # 公司环境可以直接访问 Docker Hub 时，才跳过 MySQL/MinIO/Nginx 基础镜像
 .\scripts\push-images-to-registry.ps1 -SkipRuntime
+
+# 调整单个镜像的推送尝试次数和基础等待秒数
+.\scripts\push-images-to-registry.ps1 -PushRetryCount 8 -PushRetryDelaySeconds 10
 ```
 
-默认推送完整运行栈的 8 个镜像：5 个业务镜像（backend、frontend、go-parser、go-parser-vendor、slide-worker）和 3 个基础镜像（MySQL 8.4、MinIO `RELEASE.2025-04-22T22-12-26Z`、Nginx 1.29-alpine）。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出分类及完整目标清单，只有输入 `YES` 才会执行。`.bat` 完成后会停留在窗口中，方便查看成功或失败信息。
+默认推送完整运行栈的 8 个镜像：5 个业务镜像（backend、frontend、go-parser、go-parser-vendor、slide-worker）和 3 个基础镜像（MySQL 8.4、MinIO `RELEASE.2025-04-22T22-12-26Z`、Nginx 1.29-alpine）。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出分类及完整目标清单，只有输入 `YES` 才会执行。每个镜像默认最多尝试推送 5 次，失败后的等待时间依次为 5、10、15、20 秒；重试只针对当前失败的镜像，Docker 会复用仓库中已存在的镜像层。`.bat` 完成后会停留在窗口中，方便查看成功或失败信息。
 
 ## 如何保证和本地一致
 

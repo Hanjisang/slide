@@ -4,6 +4,10 @@ param(
     [string]$Namespace = $(if ($env:COMPANY_REGISTRY_NAMESPACE) { $env:COMPANY_REGISTRY_NAMESPACE } else { 'custom-develop' }),
     [string]$SourceTag = 'latest',
     [string]$Tag = 'latest',
+    [ValidateRange(1, 20)]
+    [int]$PushRetryCount = 5,
+    [ValidateRange(1, 300)]
+    [int]$PushRetryDelaySeconds = 5,
     [switch]$Login,
     [switch]$SkipVendor,
     [switch]$SkipRuntime,
@@ -36,24 +40,50 @@ Registry setup hint for ${Registry}:
 "@
 }
 
-function Invoke-DockerPush([string]$Image, [string]$Registry) {
-    $output = @(& docker push $Image 2>&1)
-    $exitCode = $LASTEXITCODE
-    $output | ForEach-Object { Write-Host $_ }
-    if ($exitCode -ne 0) {
-        throw "Docker push failed (exit code $exitCode): docker push $Image`n$(Get-RegistrySetupHint $Registry)"
-    }
+function Invoke-DockerPush(
+    [string]$Image,
+    [string]$Registry,
+    [int]$MaxAttempts,
+    [int]$RetryDelaySeconds
+) {
+    for ($attempt = 1; $attempt -le $MaxAttempts; $attempt++) {
+        Write-Host "Pushing $Image (attempt $attempt/$MaxAttempts)" -ForegroundColor Cyan
 
-    $digest = $null
-    foreach ($line in $output) {
-        if ([string]$line -match 'digest:\s*(sha256:[0-9a-f]{64})\b') {
-            $digest = $Matches[1]
+        # Windows PowerShell can promote native stderr redirected with 2>&1 to a
+        # terminating NativeCommandError when ErrorActionPreference is Stop.
+        # Keep it as captured output so the exit code can drive retry handling.
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        try {
+            $output = @(& docker push $Image 2>&1)
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
         }
+
+        $output | ForEach-Object { Write-Host $_ }
+        if ($exitCode -eq 0) {
+            $digest = $null
+            foreach ($line in $output) {
+                if ([string]$line -match 'digest:\s*(sha256:[0-9a-f]{64})\b') {
+                    $digest = $Matches[1]
+                }
+            }
+            if ([string]::IsNullOrWhiteSpace($digest)) {
+                throw "Docker push did not return a registry digest for $Image. Refusing to report success."
+            }
+            return $digest
+        }
+
+        if ($attempt -lt $MaxAttempts) {
+            $waitSeconds = [Math]::Min(60, $RetryDelaySeconds * $attempt)
+            Write-Host "Push failed (exit code $exitCode). Retrying this image in $waitSeconds seconds..." -ForegroundColor Yellow
+            Start-Sleep -Seconds $waitSeconds
+            continue
+        }
+
+        throw "Docker push failed after $MaxAttempts attempts (last exit code $exitCode): docker push $Image`n$(Get-RegistrySetupHint $Registry)"
     }
-    if ([string]::IsNullOrWhiteSpace($digest)) {
-        throw "Docker push did not return a registry digest for $Image. Refusing to report success."
-    }
-    return $digest
 }
 
 function Get-RegistryEndpoint([string]$Value) {
@@ -208,7 +238,7 @@ try {
             throw "Image tag verification failed for $($plan.Target). Source and target image IDs differ."
         }
 
-        $remoteDigest = Invoke-DockerPush $plan.Target $Registry
+        $remoteDigest = Invoke-DockerPush $plan.Target $Registry $PushRetryCount $PushRetryDelaySeconds
 
         $pushedId = Get-ImageId $plan.Target
         if ($pushedId -ne $plan.SourceId) {
@@ -224,7 +254,7 @@ try {
             if ($latestId -ne $plan.SourceId) {
                 throw "Image tag verification failed for $latestTarget. Source and target image IDs differ."
             }
-            $latestRemoteDigest = Invoke-DockerPush $latestTarget $Registry
+            $latestRemoteDigest = Invoke-DockerPush $latestTarget $Registry $PushRetryCount $PushRetryDelaySeconds
             Write-Host "Updated and verified latest: $latestTarget ($latestRemoteDigest)" -ForegroundColor Green
         }
     }
