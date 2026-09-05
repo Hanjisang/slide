@@ -171,10 +171,15 @@ try {
         $loginRequested = $loginAnswer.Trim().ToUpperInvariant() -eq 'Y'
     }
 
-    $answer = Read-Host 'Type YES to start pushing'
-    if ($answer.Trim().ToUpperInvariant() -ne 'YES') {
-        Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
-        exit 0
+    while ($true) {
+        $answer = Read-Host 'Type YES to start pushing, or NO to cancel'
+        $normalizedAnswer = if ($null -eq $answer) { '' } else { $answer.Trim().ToUpperInvariant() }
+        if ($normalizedAnswer -eq 'YES') { break }
+        if ($normalizedAnswer -eq 'NO') {
+            Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
+            exit 0
+        }
+        Write-Host 'Please type YES to push or NO to cancel.' -ForegroundColor Yellow
     }
 
     Write-Step 'Checking registry connectivity (connect company VPN first)'
