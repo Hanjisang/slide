@@ -23,6 +23,26 @@ function Invoke-Docker([string[]]$Arguments) {
     }
 }
 
+function Invoke-DockerPush([string]$Image) {
+    $output = @(& docker push $Image 2>&1)
+    $exitCode = $LASTEXITCODE
+    $output | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) {
+        throw "Docker push failed (exit code $exitCode): docker push $Image"
+    }
+
+    $digest = $null
+    foreach ($line in $output) {
+        if ([string]$line -match 'digest:\s*(sha256:[0-9a-f]{64})\b') {
+            $digest = $Matches[1]
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($digest)) {
+        throw "Docker push did not return a registry digest for $Image. Refusing to report success."
+    }
+    return $digest
+}
+
 function Get-RegistryEndpoint([string]$Value) {
     $text = $Value.Trim().TrimEnd('/')
     if ($text -match '^https?://') {
@@ -36,6 +56,32 @@ function Get-RegistryEndpoint([string]$Value) {
 function Test-LocalImage([string]$Image) {
     & docker image inspect $Image *> $null
     return $LASTEXITCODE -eq 0
+}
+
+function Get-ImageId([string]$Image) {
+    $value = & docker image inspect $Image --format '{{.Id}}'
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) {
+        throw "Cannot inspect local image: $Image"
+    }
+    return $value.Trim()
+}
+
+function Get-ImageDigest([string]$Image, [string]$Repository) {
+    $raw = & docker image inspect $Image --format '{{json .RepoDigests}}'
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot inspect image digest: $Image"
+    }
+
+    $entries = @($raw | ConvertFrom-Json)
+    $prefix = "$Repository@"
+    $match = @(
+        $entries |
+            ForEach-Object { [string]$_ } |
+            Where-Object { $_.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) }
+    ) | Select-Object -First 1
+
+    if ($null -eq $match) { return $null }
+    return ([string]$match).Substring($prefix.Length)
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -79,10 +125,47 @@ try {
             continue
         }
         $target = "$Registry/$Namespace/$($image.Name):$Tag"
-        $plans += @{ Source = $source; Target = $target }
+        $repository = "$Registry/$Namespace/$($image.Name)"
+        $plans += @{
+            Source = $source
+            Target = $target
+            Repository = $repository
+            SourceId = Get-ImageId $source
+        }
     }
 
     if ($plans.Count -eq 0) { throw 'No local images are available to push.' }
+
+    Write-Step 'Checking local running services'
+    $runningServiceIds = @{}
+    $composeOutput = @(& docker compose ps --status running --format json 2>$null)
+    if ($LASTEXITCODE -eq 0) {
+        foreach ($line in $composeOutput) {
+            try {
+                $service = ([string]$line | ConvertFrom-Json)
+                $labelText = [string]$service.Labels
+                if ($labelText -match '(^|,)com\.docker\.compose\.image=([^,]+)') {
+                    $runningServiceIds[[string]$service.Service] = $Matches[2]
+                }
+            } catch {
+                Write-Host 'Could not parse a running Compose service record; continuing with image ID checks.' -ForegroundColor Yellow
+            }
+        }
+    } else {
+        Write-Host 'Could not inspect running Compose services; image ID checks will still be performed.' -ForegroundColor Yellow
+    }
+
+    foreach ($plan in $plans) {
+        $serviceName = $plan.Source.Split(':')[0] -replace '^medical-report-mvp-', ''
+        if ($runningServiceIds.ContainsKey($serviceName)) {
+            if ($runningServiceIds[$serviceName] -ne $plan.SourceId) {
+                throw "Running local service '$serviceName' does not use $($plan.Source). Rebuild/restart the local stack before pushing."
+            }
+            Write-Host "  $serviceName uses the exact source image ID $($plan.SourceId)" -ForegroundColor Green
+        } else {
+            Write-Host "  $serviceName is not running; source image ID will be checked directly." -ForegroundColor Yellow
+        }
+    }
 
     Write-Step 'Images to push'
     $plans | ForEach-Object { Write-Host "  $($_.Source)  ->  $($_.Target)" }
@@ -95,14 +178,39 @@ try {
     Write-Step 'Tagging and pushing'
     foreach ($plan in $plans) {
         Invoke-Docker @('tag', $plan.Source, $plan.Target)
-        Invoke-Docker @('push', $plan.Target)
-        Write-Host "Completed: $($plan.Target)" -ForegroundColor Green
+
+        $taggedId = Get-ImageId $plan.Target
+        if ($taggedId -ne $plan.SourceId) {
+            throw "Image tag verification failed for $($plan.Target). Source and target image IDs differ."
+        }
+
+        $remoteDigest = Invoke-DockerPush $plan.Target
+
+        $pushedId = Get-ImageId $plan.Target
+        if ($pushedId -ne $plan.SourceId) {
+            throw "Image verification failed after push for $($plan.Target). Local target image changed."
+        }
+
+        $pushedDigest = Get-ImageDigest $plan.Target $plan.Repository
+        if ($pushedDigest -and ($remoteDigest -ne $pushedDigest)) {
+            throw "Digest verification failed for $($plan.Target). Registry: $remoteDigest; local target: $pushedDigest"
+        }
+
+        Write-Host "Verified exact image digest: $($plan.Repository)@$remoteDigest" -ForegroundColor Green
 
         if ($PushLatest -and $Tag -ne 'latest') {
-            $latestTarget = "$Registry/$Namespace/$($plan.Target.Split('/')[-1].Split(':')[0]):latest"
+            $latestTarget = "$($plan.Repository):latest"
             Invoke-Docker @('tag', $plan.Source, $latestTarget)
-            Invoke-Docker @('push', $latestTarget)
-            Write-Host "Updated latest: $latestTarget" -ForegroundColor Green
+            $latestId = Get-ImageId $latestTarget
+            if ($latestId -ne $plan.SourceId) {
+                throw "Image tag verification failed for $latestTarget. Source and target image IDs differ."
+            }
+            $latestRemoteDigest = Invoke-DockerPush $latestTarget
+            $latestDigest = Get-ImageDigest $latestTarget $plan.Repository
+            if ($latestDigest -and ($latestRemoteDigest -ne $latestDigest)) {
+                throw "Digest verification failed for $latestTarget. Registry: $latestRemoteDigest; local target: $latestDigest"
+            }
+            Write-Host "Updated and verified latest: $latestTarget ($latestRemoteDigest)" -ForegroundColor Green
         }
     }
 
