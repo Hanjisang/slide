@@ -23,12 +23,24 @@ function Invoke-Docker([string[]]$Arguments) {
     }
 }
 
-function Invoke-DockerPush([string]$Image) {
+function Get-RegistrySetupHint([string]$Registry) {
+    return @"
+Registry setup hint for ${Registry}:
+1. Connect the company VPN and confirm the registry host/port is reachable.
+2. If the registry is plain HTTP, open Docker Desktop -> Settings -> Docker Engine and add:
+   "insecure-registries": ["$Registry"]
+   Apply & restart Docker Desktop, then retry.
+3. If the registry is HTTPS with a private CA, install the CA certificate for this registry instead of using insecure-registries.
+4. If Docker Desktop uses a proxy, add the registry host to its proxy bypass / noProxy list.
+"@
+}
+
+function Invoke-DockerPush([string]$Image, [string]$Registry) {
     $output = @(& docker push $Image 2>&1)
     $exitCode = $LASTEXITCODE
     $output | ForEach-Object { Write-Host $_ }
     if ($exitCode -ne 0) {
-        throw "Docker push failed (exit code $exitCode): docker push $Image"
+        throw "Docker push failed (exit code $exitCode): docker push $Image`n$(Get-RegistrySetupHint $Registry)"
     }
 
     $digest = $null
@@ -81,13 +93,17 @@ try {
     $endpoint = Get-RegistryEndpoint $Registry
     $connection = Test-NetConnection -ComputerName $endpoint.Host -Port $endpoint.Port -WarningAction SilentlyContinue
     if (-not $connection.TcpTestSucceeded) {
-        throw "Cannot connect to $Registry. Check company VPN and registry address, then run again."
+        throw "Cannot connect to $Registry. Check company VPN and registry address, then run again.`n$(Get-RegistrySetupHint $Registry)"
     }
 
     if ($Login) {
         Write-Step 'Logging in to registry'
         Write-Host 'Docker will read the username and password interactively; credentials are not stored in this script.'
-        Invoke-Docker @('login', $Registry)
+        try {
+            Invoke-Docker @('login', $Registry)
+        } catch {
+            throw "$($_.Exception.Message)`n$(Get-RegistrySetupHint $Registry)"
+        }
     }
 
     $images = @(
@@ -165,7 +181,7 @@ try {
             throw "Image tag verification failed for $($plan.Target). Source and target image IDs differ."
         }
 
-        $remoteDigest = Invoke-DockerPush $plan.Target
+        $remoteDigest = Invoke-DockerPush $plan.Target $Registry
 
         $pushedId = Get-ImageId $plan.Target
         if ($pushedId -ne $plan.SourceId) {
@@ -181,7 +197,7 @@ try {
             if ($latestId -ne $plan.SourceId) {
                 throw "Image tag verification failed for $latestTarget. Source and target image IDs differ."
             }
-            $latestRemoteDigest = Invoke-DockerPush $latestTarget
+            $latestRemoteDigest = Invoke-DockerPush $latestTarget $Registry
             Write-Host "Updated and verified latest: $latestTarget ($latestRemoteDigest)" -ForegroundColor Green
         }
     }

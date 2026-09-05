@@ -23,6 +23,22 @@
 
 Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不会写入项目文件。
 
+## 遇到 `Get https://10.25.13.206:5000/v2/: EOF`
+
+这通常表示 Docker daemon 正在按 HTTPS 访问一个 HTTP 私有仓库，或者 Docker Desktop 的代理/VPN 没有把内网仓库直连出去。账号密码还没有进入校验阶段。
+
+先确认公司 VPN 已连接，然后在 Docker Desktop 的 **Settings → Docker Engine** 中，根据公司仓库实际协议处理：
+
+如果仓库是 HTTP，在 JSON 配置中加入（保留原有配置项）：
+
+```json
+"insecure-registries": ["10.25.13.206:5000"]
+```
+
+点击 **Apply & Restart**。如果仓库是 HTTPS + 公司私有 CA，则应安装对应 CA 证书，不要添加 `insecure-registries`。如果 Docker Desktop 配置了代理，还要把 `10.25.13.206` 加入代理绕过（`noProxy`）列表。
+
+重启 Docker Desktop 后重新双击 `.bat`。脚本遇到登录/推送连接错误时也会显示这段处理提示。
+
 ## 常用参数
 
 ```powershell
