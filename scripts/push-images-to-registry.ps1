@@ -164,6 +164,13 @@ try {
     Write-Host "Runtime images:  $($runtimePlans.Count)"
     Write-Host "Total images:    $($plans.Count)"
     $plans | ForEach-Object { Write-Host "  [$($_.Kind)] $($_.Source)  ->  $($_.Target)" }
+
+    $loginRequested = $Login
+    if (-not $Login) {
+        $loginAnswer = Read-Host 'Login to the company registry first? [Y/N]'
+        $loginRequested = $loginAnswer.Trim().ToUpperInvariant() -eq 'Y'
+    }
+
     $answer = Read-Host 'Type YES to start pushing'
     if ($answer.Trim().ToUpperInvariant() -ne 'YES') {
         Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
@@ -177,7 +184,7 @@ try {
         throw "Cannot connect to $Registry. Check company VPN and registry address, then run again.`n$(Get-RegistrySetupHint $Registry)"
     }
 
-    if ($Login) {
+    if ($loginRequested) {
         Write-Step 'Logging in to registry'
         Write-Host 'Docker will read the username and password interactively; credentials are not stored in this script.'
         try {
