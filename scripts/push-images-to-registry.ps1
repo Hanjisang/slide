@@ -6,6 +6,7 @@ param(
     [string]$Tag = 'latest',
     [switch]$Login,
     [switch]$SkipVendor,
+    [switch]$SkipRuntime,
     [switch]$PushLatest
 )
 
@@ -107,27 +108,36 @@ try {
     }
 
     $images = @(
-        @{ Name = 'medical-report-mvp-backend'; Required = $true },
-        @{ Name = 'medical-report-mvp-frontend'; Required = $true },
-        @{ Name = 'medical-report-mvp-go-parser'; Required = $true },
-        @{ Name = 'medical-report-mvp-slide-worker'; Required = $true },
-        @{ Name = 'medical-report-mvp-go-parser-vendor'; Required = -not $SkipVendor }
+        @{ Name = 'medical-report-mvp-backend'; SourceTag = $SourceTag; Service = 'backend'; Kind = 'business'; Required = $true },
+        @{ Name = 'medical-report-mvp-frontend'; SourceTag = $SourceTag; Service = 'frontend'; Kind = 'business'; Required = $true },
+        @{ Name = 'medical-report-mvp-go-parser'; SourceTag = $SourceTag; Service = 'go-parser'; Kind = 'business'; Required = $true },
+        @{ Name = 'medical-report-mvp-slide-worker'; SourceTag = $SourceTag; Service = 'slide-worker'; Kind = 'business'; Required = $true },
+        @{ Name = 'medical-report-mvp-go-parser-vendor'; SourceTag = $SourceTag; Service = 'go-parser-vendor'; Kind = 'business'; Required = -not $SkipVendor },
+        @{ Name = 'mysql'; SourceTag = '8.4'; Service = 'mysql'; Kind = 'runtime'; Required = -not $SkipRuntime },
+        @{ Name = 'minio/minio'; SourceTag = 'RELEASE.2025-04-22T22-12-26Z'; Service = 'minio'; Kind = 'runtime'; Required = -not $SkipRuntime },
+        @{ Name = 'nginx'; SourceTag = '1.29-alpine'; Service = 'nginx'; Kind = 'runtime'; Required = -not $SkipRuntime }
     )
 
     $plans = @()
     foreach ($image in $images) {
-        $source = "$($image.Name):$SourceTag"
+        if (($SkipVendor -and $image.Service -eq 'go-parser-vendor') -or ($SkipRuntime -and $image.Kind -eq 'runtime')) {
+            Write-Host "Skipping selected image: $($image.Name):$($image.SourceTag)" -ForegroundColor Yellow
+            continue
+        }
+        $source = "$($image.Name):$($image.SourceTag)"
         if (-not (Test-LocalImage $source)) {
             if ($image.Required) { throw "Local image does not exist: $source. Build it first." }
             Write-Host "Skipping optional image: $source" -ForegroundColor Yellow
             continue
         }
-        $target = "$Registry/$Namespace/$($image.Name):$Tag"
-        $repository = "$Registry/$Namespace/$($image.Name)"
+        $targetTag = if ($image.Kind -eq 'runtime') { $image.SourceTag } else { $Tag }
+        $target = "$Registry/$Namespace/$($image.Name):$targetTag"
         $plans += @{
             Source = $source
             Target = $target
             SourceId = Get-ImageId $source
+            Service = $image.Service
+            Kind = $image.Kind
         }
     }
 
@@ -153,7 +163,7 @@ try {
     }
 
     foreach ($plan in $plans) {
-        $serviceName = $plan.Source.Split(':')[0] -replace '^medical-report-mvp-', ''
+        $serviceName = $plan.Service
         if ($runningServiceIds.ContainsKey($serviceName)) {
             if ($runningServiceIds[$serviceName] -ne $plan.SourceId) {
                 throw "Running local service '$serviceName' does not use $($plan.Source). Rebuild/restart the local stack before pushing."
@@ -165,7 +175,10 @@ try {
     }
 
     Write-Step 'Images to push'
-    $plans | ForEach-Object { Write-Host "  $($_.Source)  ->  $($_.Target)" }
+    Write-Host "Business images: $(($plans | Where-Object { $_.Kind -eq 'business' }).Count)"
+    Write-Host "Runtime images:  $(($plans | Where-Object { $_.Kind -eq 'runtime' }).Count)"
+    Write-Host "Total images:    $($plans.Count)"
+    $plans | ForEach-Object { Write-Host "  [$($_.Kind)] $($_.Source)  ->  $($_.Target)" }
     $answer = Read-Host 'Type YES to start pushing'
     if ($answer.Trim().ToUpperInvariant() -ne 'YES') {
         Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
@@ -190,7 +203,7 @@ try {
 
         Write-Host "Verified local image ID and registry manifest digest: $remoteDigest" -ForegroundColor Green
 
-        if ($PushLatest -and $Tag -ne 'latest') {
+        if ($PushLatest -and $plan.Kind -eq 'business' -and $Tag -ne 'latest') {
             $latestTarget = "$Registry/$Namespace/$($plan.Source.Split(':')[0]):latest"
             Invoke-Docker @('tag', $plan.Source, $latestTarget)
             $latestId = Get-ImageId $latestTarget
@@ -202,7 +215,7 @@ try {
         }
     }
 
-    Write-Host "`nAll images pushed successfully. Target: $Registry/$Namespace; tag: $Tag" -ForegroundColor Green
+    Write-Host "`nAll selected images pushed successfully. Target: $Registry/$Namespace; business tag: $Tag" -ForegroundColor Green
 }
 finally {
     Pop-Location

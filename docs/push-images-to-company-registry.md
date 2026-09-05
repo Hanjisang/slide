@@ -50,9 +50,12 @@ Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不
 
 # 不推送厂商 SDK Parser 镜像
 .\scripts\push-images-to-registry.ps1 -SkipVendor
+
+# 公司环境可以直接访问 Docker Hub 时，才跳过 MySQL/MinIO/Nginx 基础镜像
+.\scripts\push-images-to-registry.ps1 -SkipRuntime
 ```
 
-默认推送：backend、frontend、go-parser、slide-worker；本地存在时还会推送 go-parser-vendor。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出完整目标清单，只有输入 `YES` 才会执行。`.bat` 完成后会停留在窗口中，方便查看成功或失败信息。
+默认推送完整运行栈的 8 个镜像：5 个业务镜像（backend、frontend、go-parser、go-parser-vendor、slide-worker）和 3 个基础镜像（MySQL 8.4、MinIO `RELEASE.2025-04-22T22-12-26Z`、Nginx 1.29-alpine）。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出分类及完整目标清单，只有输入 `YES` 才会执行。`.bat` 完成后会停留在窗口中，方便查看成功或失败信息。
 
 ## 如何保证和本地一致
 
@@ -80,6 +83,9 @@ Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不
 10.25.13.206:5000/custom-develop/medical-report-mvp-go-parser:<tag>
 10.25.13.206:5000/custom-develop/medical-report-mvp-slide-worker:<tag>
 10.25.13.206:5000/custom-develop/medical-report-mvp-go-parser-vendor:<tag>
+10.25.13.206:5000/custom-develop/mysql:8.4
+10.25.13.206:5000/custom-develop/minio/minio:RELEASE.2025-04-22T22-12-26Z
+10.25.13.206:5000/custom-develop/nginx:1.29-alpine
 ```
 
-其中 vendor 镜像包含厂商 Parser 依赖；没有对应依赖或仓库不接收该镜像时，可使用 `-SkipVendor`。
+其中 vendor 镜像包含厂商 Parser 依赖；没有对应依赖时，可使用 `-SkipVendor`。只有确认公司部署环境能从 Docker Hub 获取 MySQL、MinIO、Nginx 时，才使用 `-SkipRuntime`；否则会导致部署缺少基础服务镜像。
