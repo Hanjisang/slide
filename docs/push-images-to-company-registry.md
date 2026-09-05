@@ -11,8 +11,9 @@
 ## 使用方式
 
 1. 先连接公司 VPN，并确认 Docker Desktop 正在运行。
-2. 在资源管理器中双击 `scripts/push-images-to-registry.cmd`。
-3. 输入 `YES` 确认推送。
+2. 在项目根目录双击 `push-images-to-company-registry.bat`（也可以双击 `scripts/push-images-to-registry.bat`）。
+3. 如果尚未登录公司仓库，选择 `Y`；否则选择 `N`。
+4. 输入 `YES` 确认推送。
 
 如果尚未登录仓库，可在 PowerShell 中执行：
 
@@ -35,7 +36,7 @@ Docker 会交互式读取账号和密码，凭据由 Docker Desktop 管理，不
 .\scripts\push-images-to-registry.ps1 -SkipVendor
 ```
 
-默认推送：backend、frontend、go-parser、slide-worker；本地存在时还会推送 go-parser-vendor。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出完整目标清单，只有输入 `YES` 才会执行。
+默认推送：backend、frontend、go-parser、slide-worker；本地存在时还会推送 go-parser-vendor。推送前脚本会检查 VPN 到仓库的 TCP 连通性、本地镜像是否存在，并列出完整目标清单，只有输入 `YES` 才会执行。`.bat` 完成后会停留在窗口中，方便查看成功或失败信息。
 
 ## 如何保证和本地一致
 
