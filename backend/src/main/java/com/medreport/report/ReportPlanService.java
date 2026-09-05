@@ -8,6 +8,7 @@ import org.springframework.scheduling.support.CronExpression;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -35,14 +36,15 @@ public class ReportPlanService {
         if(jdbc.queryForObject("SELECT COUNT(*) FROM report_template WHERE id=?",Integer.class,templateId)==0)throw new BizException("上报模板不存在");
         String cron=body.get("cronExpression")==null?null:String.valueOf(body.get("cronExpression")).trim();
         if("CRON".equals(frequency)){if(cron==null||cron.isBlank())throw new BizException("CRON 计划必须填写 cronExpression");parseCron(cron);}
-        boolean enabled=bool(body.getOrDefault("enabled",true));LocalDateTime next=enabled?next(frequency,cron,LocalDateTime.now()):null;
+        LocalTime executionTime=parseTime(body.getOrDefault("executionTime", "02:00:00"));
+        boolean enabled=bool(body.getOrDefault("enabled",true));LocalDateTime next=enabled?next(frequency,cron,executionTime,LocalDateTime.now()):null;
         if(id==null){
-            jdbc.update("INSERT INTO report_plan(name,template_id,spec_id,frequency_type,cron_expression,priority,max_retry,retry_policy,execution_timeout_minutes,concurrency_policy,enabled,next_run_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                    name,templateId,body.get("specId"),frequency,cron,priority(body),body.getOrDefault("maxRetry",4),body.getOrDefault("retryPolicy","FIXED"),body.getOrDefault("executionTimeoutMinutes",60),body.getOrDefault("concurrencyPolicy","QUEUE"),enabled,next);
+            jdbc.update("INSERT INTO report_plan(name,template_id,spec_id,frequency_type,cron_expression,execution_time,priority,max_retry,retry_policy,execution_timeout_minutes,concurrency_policy,enabled,next_run_time) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    name,templateId,body.get("specId"),frequency,cron,executionTime,priority(body),body.getOrDefault("maxRetry",4),body.getOrDefault("retryPolicy","FIXED"),body.getOrDefault("executionTimeoutMinutes",60),body.getOrDefault("concurrencyPolicy","QUEUE"),enabled,next);
             return jdbc.queryForObject("SELECT LAST_INSERT_ID()",Long.class);
         }
-        if(jdbc.update("UPDATE report_plan SET name=?,template_id=?,spec_id=?,frequency_type=?,cron_expression=?,priority=?,max_retry=?,retry_policy=?,execution_timeout_minutes=?,concurrency_policy=?,enabled=?,next_run_time=? WHERE id=?",
-                name,templateId,body.get("specId"),frequency,cron,priority(body),body.getOrDefault("maxRetry",4),body.getOrDefault("retryPolicy","FIXED"),body.getOrDefault("executionTimeoutMinutes",60),body.getOrDefault("concurrencyPolicy","QUEUE"),enabled,next,id)==0)throw new BizException("上报计划不存在");
+        if(jdbc.update("UPDATE report_plan SET name=?,template_id=?,spec_id=?,frequency_type=?,cron_expression=?,execution_time=?,priority=?,max_retry=?,retry_policy=?,execution_timeout_minutes=?,concurrency_policy=?,enabled=?,next_run_time=? WHERE id=?",
+                name,templateId,body.get("specId"),frequency,cron,executionTime,priority(body),body.getOrDefault("maxRetry",4),body.getOrDefault("retryPolicy","FIXED"),body.getOrDefault("executionTimeoutMinutes",60),body.getOrDefault("concurrencyPolicy","QUEUE"),enabled,next,id)==0)throw new BizException("上报计划不存在");
         return id;
     }
 
@@ -64,16 +66,21 @@ public class ReportPlanService {
     }
 
     private void advance(Map<String,Object> plan){String frequency=String.valueOf(plan.get("frequency_type"));String cron=plan.get("cron_expression")==null?null:String.valueOf(plan.get("cron_expression"));
-        jdbc.update("UPDATE report_plan SET last_run_time=NOW(),next_run_time=? WHERE id=?",next(frequency,cron,LocalDateTime.now()),id(plan));}
+        jdbc.update("UPDATE report_plan SET last_run_time=NOW(),next_run_time=? WHERE id=?",next(frequency,cron,parseTime(plan.get("execution_time")),LocalDateTime.now()),id(plan));}
     private Map<String,Object> find(long id){List<Map<String,Object>> rows=jdbc.queryForList("SELECT * FROM report_plan WHERE id=?",id);
         if(rows.isEmpty())throw new BizException("上报计划不存在");return rows.getFirst();}
-    private LocalDateTime next(String frequency,String cron,LocalDateTime now){return switch(frequency){
+    private LocalDateTime next(String frequency,String cron,LocalTime executionTime,LocalDateTime now){return switch(frequency){
         case "MANUAL"->null;case "HOURLY"->now.plusHours(1).withMinute(0).withSecond(0).withNano(0);
-        case "DAILY"->now.toLocalDate().plusDays(1).atStartOfDay();case "WEEKLY"->now.toLocalDate().plusWeeks(1).atStartOfDay();case "MONTHLY"->now.toLocalDate().plusMonths(1).atStartOfDay();case "CRON"->parseCron(cron).next(now);default->throw new BizException("frequencyType 无效");};}
+        case "DAILY"->nextAt(now,executionTime,now.toLocalDate().plusDays(1));
+        case "WEEKLY"->nextAt(now,executionTime,now.toLocalDate().plusWeeks(1));
+        case "MONTHLY"->nextAt(now,executionTime,now.toLocalDate().plusMonths(1));
+        case "CRON"->parseCron(cron).next(now);default->throw new BizException("frequencyType 无效");};}
+    private LocalDateTime nextAt(LocalDateTime now,LocalTime time,java.time.LocalDate date){LocalDateTime candidate=date.atTime(time==null?LocalTime.MIDNIGHT:time);return candidate.isAfter(now)?candidate:candidate.plusDays(1);}
     private CronExpression parseCron(String value){try{return CronExpression.parse(value);}catch(IllegalArgumentException ex){throw new BizException("Cron 表达式无效: "+ex.getMessage());}}
     private long id(Map<String,Object> row){return ((Number)row.get("id")).longValue();}
     private String text(Map<String,Object> body,String key){String value=body.get(key)==null?"":String.valueOf(body.get(key)).trim();if(value.isEmpty())throw new BizException(key+" 不能为空");return value;}
     private long number(Map<String,Object> body,String key){Object value=body.get(key);if(value instanceof Number n)return n.longValue();try{return Long.parseLong(String.valueOf(value));}catch(Exception ex){throw new BizException(key+" 无效");}}
     private boolean bool(Object value){return value instanceof Boolean b?b:value instanceof Number n?n.intValue()!=0:Boolean.parseBoolean(String.valueOf(value));}
+    private LocalTime parseTime(Object value){if(value instanceof LocalTime t)return t;if(value instanceof java.sql.Time t)return t.toLocalTime();try{return LocalTime.parse(String.valueOf(value));}catch(Exception ex){throw new BizException("executionTime 应为 HH:mm:ss");}}
     private int priority(Map<String,Object>b){Object v=b.getOrDefault("priority",5);return Math.max(1,Math.min(9,v instanceof Number n?n.intValue():Integer.parseInt(String.valueOf(v))));}
 }

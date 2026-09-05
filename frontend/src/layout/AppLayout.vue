@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bell, DataAnalysis, DataBoard, DocumentChecked, Files, FirstAidKit, Fold, FolderOpened, Menu as MenuIcon, Promotion, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, DataAnalysis, DataBoard, Files, Fold, FolderOpened, Menu as MenuIcon, Promotion, Setting, SwitchButton } from '@element-plus/icons-vue'
 import { ElNotification } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import api from '../api'
@@ -13,13 +13,35 @@ const notifiedAlertIds = new Set<string>(JSON.parse(sessionStorage.getItem('noti
 const hasCriticalAlert = computed(() => activeAlerts.value.some((item) => item.severity === 'CRITICAL'))
 const menuGroups = [
   { path: '/dashboard', label: '首页', icon: DataBoard },
-  { label: '数据采集', icon: DataAnalysis, permissions: ['DATA_VIEW','DATA_EDIT'], children: [{ path: '/data-sources', label: '数据源与采集' }] },
-  { path: '/medical-data', label: '医疗数据', icon: FirstAidKit, permissions: ['DATA_VIEW'] },
-  { label: '数据质量', icon: DocumentChecked, permissions: ['QUALITY_MANAGE'], children: [{ path: '/quality', label: '规则与异常' }] },
-  { label: '数字切片', icon: Files, permissions: ['SLIDE_VIEW'], children: [{ path: '/slides', label: '切片管理与归档' }] },
-  { label: '文件管理', icon: FolderOpened, permissions: ['FILE_MANAGE'], children: [{ path: '/files', label: '文件、版本与备份' }] },
-  { label: '数据上报', icon: Promotion, permissions: ['REPORT_GENERATE','DATA_VIEW'], children: [{ path: '/reports', label: '规范、预审核、任务与传输' }] },
-  { label: '系统管理', icon: Setting, permissions: ['USER_MANAGE','SYSTEM_CONFIG','MONITOR_VIEW','LOG_VIEW','DICT_MANAGE'], children: [{ path: '/system', label: '配置、监控与告警', icon: Bell }] },
+  { label: '医疗数据采集与治理', icon: DataAnalysis, permissions: ['DATA_VIEW','DATA_EDIT','QUALITY_MANAGE'], children: [
+    { path: '/data-sources', label: '数据采集' },
+    { path: '/medical-data', label: '医疗数据' },
+    { path: '/quality?tab=conversion', label: '数据清洗转换' },
+    { path: '/quality?tab=validation', label: '数据校验' },
+  ] },
+  { label: '数字切片', icon: Files, permissions: ['SLIDE_VIEW'], children: [
+    { path: '/slides?tab=adapters', label: '多格式数字切片显示' },
+    { path: '/slides?tab=slides', label: '数字切片管理' },
+  ] },
+  { label: '医疗数据上报', icon: Promotion, permissions: ['REPORT_GENERATE','REPORT_SEND','DATA_VIEW'], children: [
+    { path: '/reports?tab=plans', label: '上报任务调度管理' },
+    { path: '/reports?tab=prechecks', label: '数据预审核' },
+    { path: '/reports?tab=transfers', label: '安全传输保障' },
+    { path: '/reports?tab=specs', label: '多平台上报' },
+    { path: '/reports?tab=batches', label: '上报记录' },
+  ] },
+  { label: '基础数据', icon: FolderOpened, permissions: ['DICT_MANAGE','REPORT_GENERATE'], children: [
+    { path: '/reports?tab=templates', label: '报告模板设置' },
+    { path: '/system?tab=pathology-rules', label: '病理号规则设置' },
+    { path: '/system?tab=basic', label: '标本类型管理' },
+  ] },
+  { label: '系统管理', icon: Setting, permissions: ['USER_MANAGE','SYSTEM_CONFIG','MONITOR_VIEW','LOG_VIEW','DICT_MANAGE','QUALITY_MANAGE'], children: [
+    { path: '/system?tab=users', label: '用户管理' },
+    { path: '/system?tab=roles', label: '权限管理' },
+    { path: '/system?tab=logs', label: '日志管理' },
+    { path: '/system?tab=resources', label: '资源管理', icon: Bell },
+    { path: '/system?tab=quality', label: '质控管理' },
+  ] },
 ]
 const menus = computed(() => menuGroups.filter((item) => auth.hasAny(item.permissions)))
 const title = computed(() => String(route.meta.title || ''))
@@ -54,7 +76,7 @@ onBeforeUnmount(() => { window.removeEventListener('resize', syncViewport); if (
         <div class="brand-mark"><span></span><i></i></div>
         <div v-show="!navCollapsed" class="brand-copy"><strong>MedPath</strong><small>医疗数据上报平台</small></div>
       </div>
-      <el-menu :default-active="route.path" router class="side-menu" :collapse="navCollapsed">
+      <el-menu :default-active="route.fullPath" router class="side-menu" :collapse="navCollapsed">
         <template v-for="item in menus" :key="item.path || item.label">
         <el-sub-menu v-if="item.children" :index="item.label">
           <template #title><el-icon><component :is="item.icon" /></el-icon><span>{{ item.label }}</span></template>

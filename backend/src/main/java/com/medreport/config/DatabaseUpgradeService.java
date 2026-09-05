@@ -52,7 +52,7 @@ public class DatabaseUpgradeService implements ApplicationRunner {
         upgrades.put("report_template", template);
         upgrades.put("report_batch", Map.of("report_spec_id", "BIGINT", "report_job_id", "BIGINT", "precheck_status", "VARCHAR(30)", "transfer_status", "VARCHAR(30)"));
         Map<String,String> plan = new LinkedHashMap<>();
-        plan.put("spec_id", "BIGINT"); plan.put("priority", "INT NOT NULL DEFAULT 5");
+        plan.put("spec_id", "BIGINT"); plan.put("execution_time", "TIME"); plan.put("priority", "INT NOT NULL DEFAULT 5");
         plan.put("max_retry", "INT NOT NULL DEFAULT 4"); plan.put("retry_policy", "VARCHAR(30) NOT NULL DEFAULT 'FIXED'");
         plan.put("execution_timeout_minutes", "INT NOT NULL DEFAULT 60"); plan.put("concurrency_policy", "VARCHAR(20) NOT NULL DEFAULT 'QUEUE'");
         upgrades.put("report_plan", plan);
@@ -75,6 +75,8 @@ public class DatabaseUpgradeService implements ApplicationRunner {
 
         upgrades.forEach((table, columns) -> columns.forEach((column, definition) -> addColumn(table, column, definition)));
         createV04Tables();
+        jdbc.execute("CREATE TABLE IF NOT EXISTS pathology_no_rule (id BIGINT PRIMARY KEY AUTO_INCREMENT,name VARCHAR(100) NOT NULL,business_type VARCHAR(50) NOT NULL DEFAULT 'PATHOLOGY_CASE',prefix VARCHAR(30),year_format VARCHAR(30) NOT NULL DEFAULT 'yyyy',`separator` VARCHAR(10) NOT NULL DEFAULT '-',sequence_digits INT NOT NULL DEFAULT 6,start_sequence INT NOT NULL DEFAULT 1,enabled TINYINT NOT NULL DEFAULT 1,created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)");
+        jdbc.update("UPDATE report_plan SET execution_time='02:00:00' WHERE execution_time IS NULL");
         jdbc.update("""
                 UPDATE alert_event older JOIN alert_event newer
                   ON older.event_type=newer.event_type AND older.source_type <=> newer.source_type AND older.source_id <=> newer.source_id

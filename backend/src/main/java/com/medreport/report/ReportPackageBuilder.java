@@ -13,7 +13,7 @@ public class ReportPackageBuilder {
 
     public List<Map<String,Object>> build(String reportType,List<Long> selectedIds){
         String type=reportType.toUpperCase(Locale.ROOT);
-        if("PATIENT".equals(type))return patients();
+        if("PATIENT".equals(type))return patients(selectedIds);
         if(!Set.of("PATHOLOGY","PATHOLOGY_PACKAGE").contains(type))throw new BizException("不支持的上报业务类型: "+type);
         List<Long> ids=selectedIds==null?List.of():selectedIds;
         String sql="SELECT c.*,p.quality_status,p.name patient_name FROM pathology_case c LEFT JOIN patient p ON p.id=c.patient_id";
@@ -43,9 +43,23 @@ public class ReportPackageBuilder {
             GROUP BY c.id,p.name,p.quality_status ORDER BY c.id DESC
             """);}
 
-    private List<Map<String,Object>> patients(){List<Map<String,Object>> rows=jdbc.queryForList("""
-            SELECT p.* FROM patient p WHERE p.quality_status='PASSED' AND NOT EXISTS
-            (SELECT 1 FROM validation_error e WHERE e.business_type='PATIENT' AND e.business_id=p.id AND e.status IN ('PENDING','FAILED')) ORDER BY p.id
-            """);if(rows.isEmpty())throw new BizException("没有符合质量要求的待上报数据");return rows;}
+    private List<Map<String,Object>> patients(List<Long> selectedIds){
+        List<Long> ids=selectedIds==null?List.of():selectedIds;
+        String sql="SELECT p.* FROM patient p";
+        List<Map<String,Object>> rows;
+        if(ids.isEmpty()){
+            rows=jdbc.queryForList(sql+" WHERE p.quality_status='PASSED' AND NOT EXISTS\n"+
+                    "(SELECT 1 FROM validation_error e WHERE e.business_type='PATIENT' AND e.business_id=p.id AND e.status IN ('PENDING','FAILED')) ORDER BY p.id");
+        }else{
+            // The UI selects pathology-case ids. Resolve those to patients so a PATIENT
+            // report job honours the user's selection instead of silently reporting all patients.
+            String placeholders=String.join(",",Collections.nCopies(ids.size(),"?"));
+            rows=jdbc.queryForList(sql+" WHERE p.id IN (SELECT DISTINCT patient_id FROM pathology_case WHERE id IN ("+placeholders+") AND patient_id IS NOT NULL)"+
+                    " AND p.quality_status='PASSED' AND NOT EXISTS\n"+
+                    "(SELECT 1 FROM validation_error e WHERE e.business_type='PATIENT' AND e.business_id=p.id AND e.status IN ('PENDING','FAILED')) ORDER BY p.id",ids.toArray());
+        }
+        if(rows.isEmpty())throw new BizException("没有符合质量要求的待上报数据");
+        return rows;
+    }
     private Map<String,Object> one(String sql,Object...args){List<Map<String,Object>> rows=jdbc.queryForList(sql,args);return rows.isEmpty()?Map.of():rows.getFirst();}
 }

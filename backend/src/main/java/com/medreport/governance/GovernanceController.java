@@ -24,10 +24,12 @@ public class GovernanceController {
     );
     private final JdbcTemplate jdbc;
     private final AuditService audit;
+    private final MappingEngine mapping;
 
-    public GovernanceController(JdbcTemplate jdbc, AuditService audit) {
+    public GovernanceController(JdbcTemplate jdbc, AuditService audit, MappingEngine mapping) {
         this.jdbc = jdbc;
         this.audit = audit;
+        this.mapping = mapping;
     }
 
     @GetMapping("/{resourceName}")
@@ -71,6 +73,19 @@ public class GovernanceController {
         Resource resource = resource(resourceName);
         jdbc.update("DELETE FROM " + resource.table() + " WHERE id=?", id);
         return ApiResponse.ok();
+    }
+
+    @PostMapping("/mapping-test")
+    @RequirePermission({"DATA_VIEW", "QUALITY_MANAGE"})
+    public ApiResponse<Map<String, Object>> mappingTest(@RequestBody Map<String, Object> body) {
+        String businessType = String.valueOf(body.getOrDefault("businessType", "PATIENT"));
+        String sourceSystem = String.valueOf(body.getOrDefault("sourceSystem", "HIS"));
+        Object raw = body.get("data");
+        if (!(raw instanceof Map<?, ?> input)) throw new BizException("测试数据必须是 JSON 对象");
+        Map<String, Object> source = new LinkedHashMap<>();
+        input.forEach((key, value) -> source.put(String.valueOf(key), value));
+        Map<String, Object> output = mapping.transform(businessType, sourceSystem, source);
+        return ApiResponse.ok(Map.of("businessType", businessType, "sourceSystem", sourceSystem, "input", source, "output", output));
     }
 
     private Resource resource(String name) {
