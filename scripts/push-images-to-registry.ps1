@@ -167,7 +167,7 @@ try {
     Write-Step 'Images to push'
     $plans | ForEach-Object { Write-Host "  $($_.Source)  ->  $($_.Target)" }
     $answer = Read-Host 'Type YES to start pushing'
-    if ($answer -cne 'YES') {
+    if ($answer.Trim().ToUpperInvariant() -ne 'YES') {
         Write-Host 'Cancelled. No local tags were changed and nothing was pushed.' -ForegroundColor Yellow
         exit 0
     }

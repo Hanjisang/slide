@@ -13,7 +13,7 @@
 1. 先连接公司 VPN，并确认 Docker Desktop 正在运行。
 2. 在项目根目录双击 `push-images-to-company-registry.bat`（也可以双击 `scripts/push-images-to-registry.bat`）。
 3. 如果尚未登录公司仓库，选择 `Y`；否则选择 `N`。
-4. 输入 `YES` 确认推送。
+4. 输入 `YES`（大小写均可）确认推送。
 
 如果尚未登录仓库，可在 PowerShell 中执行：
 
