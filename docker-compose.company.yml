@@ -1,0 +1,172 @@
+name: medical-report-mvp
+
+services:
+  mysql:
+    image: 10.25.13.206:5000/custom-develop/mysql:8.4
+    pull_policy: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root123456}
+      MYSQL_DATABASE: medical_report
+      MYSQL_USER: medical
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-medical123}
+      TZ: Asia/Shanghai
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./deploy/mysql/00-init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root123456}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    image: 10.25.13.206:5000/custom-develop/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    pull_policy: always
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  go-parser:
+    image: 10.25.13.206:5000/custom-develop/medical-report-mvp-go-parser:latest
+    pull_policy: always
+    environment:
+      SLIDE_CACHE_DIR: /data/slides
+      TRON_SDK_PATH: ${TRON_SDK_PATH:-/opt/vendor/tron/libtronc.so}
+      HWP_SDK_PATH: ${HWP_SDK_PATH:-/opt/vendor/hwp/libhwp_sdk.so}
+      TZ: Asia/Shanghai
+    volumes:
+      - slide_cache:/data/slides:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  go-parser-vendor:
+    image: 10.25.13.206:5000/custom-develop/medical-report-mvp-go-parser-vendor:latest
+    pull_policy: always
+    user: "0:0"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    working_dir: /tmp
+    tmpfs:
+      - /tmp
+    environment:
+      SLIDE_CACHE_DIR: /data/slides
+      HWP_SDK_PATH: /opt/vendor-libs/hwp/libhwp_sdk.so
+      TRON_SDK_PATH: /opt/vendor-libs/tron/libtronc.so
+      TZ: Asia/Shanghai
+    volumes:
+      - slide_cache:/data/slides:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  slide-worker:
+    image: 10.25.13.206:5000/custom-develop/medical-report-mvp-slide-worker:latest
+    pull_policy: always
+    environment:
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      SLIDE_CACHE_DIR: /data/slides
+      GO_PARSER_URL: http://go-parser:8100
+      GO_PARSER_VENDOR_URL: http://go-parser-vendor:8100
+    ports:
+      - "8000:8000"
+    volumes:
+      - slide_cache:/data/slides
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: 10.25.13.206:5000/custom-develop/medical-report-mvp-backend:latest
+    pull_policy: always
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/medical_report?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: medical
+      DB_PASSWORD: ${MYSQL_PASSWORD:-medical123}
+      APP_SECRET: ${APP_SECRET:-medical-report-demo-secret-change-me}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin123}
+      SLIDE_WORKER_URL: http://slide-worker:8000
+      MOCK_SOURCE_JDBC_URL: jdbc:mysql://mysql:3306/mock_hospital?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+      MOCK_REPORT_URL: http://backend:8080/api/mock-report/receive
+      REPORT_DIR: /data/reports
+      TZ: Asia/Shanghai
+    ports:
+      - "${BACKEND_PORT:-18080}:8080"
+    volumes:
+      - report_data:/data/reports
+    depends_on:
+      mysql:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      slide-worker:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/system/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  frontend:
+    image: 10.25.13.206:5000/custom-develop/medical-report-mvp-frontend:latest
+    pull_policy: always
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: 10.25.13.206:5000/custom-develop/nginx:1.29-alpine
+    pull_policy: always
+    ports:
+      - "8088:80"
+    volumes:
+      - ./deploy/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+  minio_data:
+  slide_cache:
+  report_data:

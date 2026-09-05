@@ -8,6 +8,15 @@
 
 脚本不会保存账号、密码或 token。
 
+公司环境部署时使用项目根目录的 `docker-compose.company.yml`。该文件只引用公司镜像仓库，不包含任何本地 `build`：
+
+```powershell
+docker compose -f docker-compose.company.yml pull
+docker compose -f docker-compose.company.yml up -d
+```
+
+部署目录还需要保留 `deploy/mysql/00-init.sql` 和 `deploy/nginx/nginx.conf`，因为 Compose 会挂载这两个配置文件。
+
 ## 使用方式
 
 1. 先连接公司 VPN，并确认 Docker Desktop 正在运行。
